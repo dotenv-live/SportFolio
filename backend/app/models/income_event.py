@@ -6,7 +6,7 @@ from app.models.common import BaseDocument, PyObjectId
 
 
 class IncomeEventCreate(BaseModel):
-    athlete_id: PyObjectId
+    player_id: PyObjectId
     verified_income: float
     income_date: datetime
 
@@ -17,7 +17,7 @@ class IncomeEventPublic(IncomeEventCreate):
 
 
 class IncomeEventInDB(BaseDocument):
-    athlete_id: PyObjectId
+    player_id: PyObjectId
     verified_income: float
     income_date: datetime
     distributed: bool = False

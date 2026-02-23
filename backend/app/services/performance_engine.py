@@ -10,7 +10,7 @@ Where:
     θ_k   : metric weight from sport config
     M_k   : raw metric value from latest match stats
     φ     : hybrid blend factor from sport config
-    A_ML  : ML-predicted score (ai_score on athlete doc)
+    A_ML  : ML-predicted score (ai_score on player doc)
 
 Fallbacks:
     • No sport config  → raw ``actual_score`` from stats (backward compat)
@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.services.metric_normalizer import MetricNormalizer
+from app.services.metric_normalizer import MetricNormalizer, resolve_dotpath, safe_float
 from app.services.sport_config import sport_config_service
 
 logger = logging.getLogger("sportfolio.performance")
@@ -35,7 +35,7 @@ class HybridPerformanceService:
     async def compute_actual_score(
         self,
         db: AsyncIOMotorDatabase,
-        athlete_doc: dict,
+        player_doc: dict,
         latest_stat: Optional[dict],
         ai_score: float,
     ) -> float:
@@ -45,19 +45,19 @@ class HybridPerformanceService:
         Parameters
         ----------
         db : AsyncIOMotorDatabase
-        athlete_doc : dict
-            Full athlete document (must contain ``sport``).
+        player_doc : dict
+            Full player document (must contain ``sport``).
         latest_stat : dict | None
-            Most recent match-stat document for the athlete.
+            Most recent match-stat document for the player.
         ai_score : float
-            Pre-computed AI score (from athlete doc or MLModelResolver).
+            Pre-computed AI score (from player doc or MLModelResolver).
 
         Returns
         -------
         float
             Actual score A in [0, 1].
         """
-        sport_name = athlete_doc.get("sport", "")
+        sport_name = player_doc.get("sport", "")
         sport_config = await sport_config_service.get_by_name(db, sport_name)
 
         # ------ Fallback: no sport config → legacy behaviour ------
@@ -71,8 +71,8 @@ class HybridPerformanceService:
             return self._legacy_actual_score(latest_stat)
 
         # Gather historical values per metric for normalization context
-        athlete_id = athlete_doc["_id"]
-        historical = await self._gather_historical(db, athlete_id, metrics_defs)
+        player_id = player_doc["_id"]
+        historical = await self._gather_historical(db, player_id, metrics_defs)
 
         # ---- Compute A_formula ----
         a_formula = 0.0
@@ -80,7 +80,7 @@ class HybridPerformanceService:
             key = m["key"]
             weight = m.get("weight", 0.0)
             norm_strategy = m.get("normalization", "minmax")
-            raw_value = self._safe_float(stats.get(key, 0.0))
+            raw_value = safe_float(resolve_dotpath(stats, key))
             hist_values = historical.get(key, [])
             normalized = MetricNormalizer.normalize(raw_value, norm_strategy, hist_values)
             a_formula += weight * normalized
@@ -115,7 +115,7 @@ class HybridPerformanceService:
     @staticmethod
     async def _gather_historical(
         db: AsyncIOMotorDatabase,
-        athlete_id: ObjectId,
+        player_id: ObjectId,
         metrics_defs: List[dict],
     ) -> Dict[str, List[float]]:
         """
@@ -126,14 +126,14 @@ class HybridPerformanceService:
         keys = {m["key"] for m in metrics_defs}
         result: Dict[str, List[float]] = {k: [] for k in keys}
         cursor = (
-            db.match_stats.find({"athlete_id": athlete_id})
-            .sort("match_date", -1)
+            db.player_matches.find({"player_id": player_id})
+            .sort("date", -1)
             .limit(50)
         )
         async for doc in cursor:
             stats = doc.get("stats", {})
             for key in keys:
-                val = stats.get(key)
+                val = resolve_dotpath(stats, key)
                 if val is not None:
                     try:
                         result[key].append(float(val))

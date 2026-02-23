@@ -24,7 +24,7 @@ async def add_income_event(
 ):
     doc = body.model_dump()
     doc["distributed"] = False
-    doc["athlete_id"] = ObjectId(str(doc["athlete_id"]))
+    doc["player_id"] = ObjectId(str(doc["player_id"]))
     doc["created_at"] = datetime.now(timezone.utc)
     result = await db.income_events.insert_one(doc)
     return {"_id": str(result.inserted_id), "status": "created"}
@@ -47,14 +47,14 @@ async def distribute(
 async def list_income_events(
     db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
     _admin: Annotated[dict, Depends(require_admin)],
-    athlete_id: str | None = None,
+    player_id: str | None = None,
 ):
     query: dict = {}
-    if athlete_id:
-        query["athlete_id"] = ObjectId(athlete_id)
+    if player_id:
+        query["player_id"] = ObjectId(player_id)
     events = []
     async for ev in db.income_events.find(query).sort("income_date", -1):
         ev["_id"] = str(ev["_id"])
-        ev["athlete_id"] = str(ev["athlete_id"])
+        ev["player_id"] = str(ev["player_id"])
         events.append(ev)
     return events

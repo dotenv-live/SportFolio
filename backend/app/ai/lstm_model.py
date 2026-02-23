@@ -1,5 +1,5 @@
 """
-LSTM model placeholder for athlete time-series prediction.
+LSTM model placeholder for player time-series prediction.
 
 In production, replace with a trained PyTorch/TensorFlow LSTM model.
 """

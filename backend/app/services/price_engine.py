@@ -20,7 +20,7 @@ Formulas:
     Smoothed Price:
         P_final = eta * P_new + (1 - eta) * P_old
 
-All parameters are stored per athlete and configurable.
+All parameters are stored per player and configurable.
 """
 from typing import Any, Dict
 
@@ -90,26 +90,26 @@ def smooth_price(p_new: float, p_old: float, eta: float | None = None) -> float:
     return eta * p_new + (1.0 - eta) * p_old
 
 
-async def recalculate_athlete_price(
+async def recalculate_player_price(
     db: AsyncIOMotorDatabase,
-    athlete_id: str | ObjectId,
+    player_id: str | ObjectId,
 ) -> Dict[str, Any]:
     """
-    Full price recalculation pipeline for a single athlete.
+    Full price recalculation pipeline for a single player.
     Reads current doc, computes FV, DI, raw P, applies smoothing, persists.
     Returns updated pricing fields.
     """
-    if isinstance(athlete_id, str):
-        athlete_id = ObjectId(athlete_id)
+    if isinstance(player_id, str):
+        player_id = ObjectId(player_id)
 
-    doc = await db.athletes.find_one({"_id": athlete_id})
+    doc = await db.players.find_one({"_id": player_id})
     if doc is None:
-        raise ValueError(f"Athlete {athlete_id} not found")
+        raise ValueError(f"Player {player_id} not found")
 
     # --- Derive sub-scores from latest match stats if available ---
-    latest_stat = await db.match_stats.find_one(
-        {"athlete_id": athlete_id},
-        sort=[("match_date", -1)],
+    latest_stat = await db.player_matches.find_one(
+        {"player_id": player_id},
+        sort=[("date", -1)],
     )
 
     # --- Sport-dynamic AI score ---
@@ -118,34 +118,29 @@ async def recalculate_athlete_price(
     sport_config = await sport_config_service.get_by_name(db, sport_name)
     if sport_config is not None:
         # Recompute AI = λ₁·XGB + λ₂·LSTM using sport-specific weights
-        athlete_stats = []
-        async for s_doc in db.match_stats.find({"athlete_id": athlete_id}).sort("match_date", -1).limit(50):
-            athlete_stats.append(s_doc)
-        if athlete_stats:
+        player_stats = []
+        async for s_doc in db.player_matches.find({"player_id": player_id}).sort("date", -1).limit(50):
+            player_stats.append(s_doc)
+        if player_stats:
             ai_weights = sport_config.get("ai_weights")
-            ai_score = ml_model_resolver.compute_ai_score(sport_name, ai_weights, athlete_stats)
+            ai_score = ml_model_resolver.compute_ai_score(sport_name, ai_weights, player_stats)
 
     # --- Sport-dynamic actual score (A) ---
     actual_score = await hybrid_performance_service.compute_actual_score(
         db, doc, latest_stat, ai_score,
     )
 
-    # --- Consistency, growth, fitness remain stat-sourced (unchanged) ---
-    consistency = 0.5
-    growth = 0.5
-    fitness = 0.5
-    if latest_stat and latest_stat.get("stats"):
-        s = latest_stat["stats"]
-        consistency = float(s.get("consistency", 0.5))
-        growth = float(s.get("growth", 0.5))
-        fitness = float(s.get("fitness", 0.5))
+    # --- Consistency, growth, fitness from player doc (set by cron) ---
+    consistency = float(doc.get("consistency_score", 0.5))
+    growth = float(doc.get("growth_score", 0.5))
+    fitness = float(doc.get("fitness_score", 0.5))
 
     ps = compute_performance_score(actual_score, consistency, growth, fitness, ai_score)
-    fv = compute_fundamental_value(doc["base_value"], doc["alpha"], ps)
+    fv = compute_fundamental_value(doc.get("base_value", 50.0), doc.get("alpha", 0.8), ps)
 
-    float_shares = doc.get("circulating_shares", doc["total_shares"])
+    float_shares = doc.get("circulating_shares", doc.get("total_shares", 1.0))
     di = compute_demand_impact(
-        doc["beta"],
+        doc.get("beta", 0.05),
         doc.get("buy_volume", 0.0),
         doc.get("sell_volume", 0.0),
         float_shares,
@@ -161,9 +156,19 @@ async def recalculate_athlete_price(
         "current_price": p_final,
     }
 
-    await db.athletes.update_one(
-        {"_id": athlete_id},
+    await db.players.update_one(
+        {"_id": player_id},
         {"$set": update_fields},
     )
+
+    # ---------- record price snapshot ----------
+    from datetime import datetime, timezone as tz
+    await db.price_history.insert_one({
+        "player_id": player_id,
+        "price": p_final,
+        "fundamental_value": fv,
+        "performance_score": ps,
+        "timestamp": datetime.now(tz.utc),
+    })
 
     return {**update_fields, "raw_price": p_raw, "demand_impact": di}

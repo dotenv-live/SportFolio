@@ -14,7 +14,7 @@ from app.core.security import hash_password
 from app.db.indexes import create_indexes
 from app.services.sport_config import sport_config_service
 
-ATHLETES = [
+PLAYERS = [
     {
         "name": "Virat Kohli",
         "sport": "Cricket",
@@ -142,7 +142,7 @@ async def seed():
     db = client[settings.mongo_db]
 
     # Drop existing collections
-    for coll in ["users", "athletes", "holdings", "transactions", "income_events", "match_stats", "sports"]:
+    for coll in ["users", "players", "holdings", "transactions", "income_events", "player_matches", "sports", "price_history"]:
         await db[coll].drop()
 
     await create_indexes(db)
@@ -151,19 +151,48 @@ async def seed():
     user_results = await db.users.insert_many(USERS)
     print(f"✓ Inserted {len(user_results.inserted_ids)} users")
 
-    # Insert athletes
-    athlete_results = await db.athletes.insert_many(ATHLETES)
-    athlete_ids = athlete_results.inserted_ids
-    print(f"✓ Inserted {len(athlete_ids)} athletes")
+    # Insert players
+    player_results = await db.players.insert_many(PLAYERS)
+    player_ids = player_results.inserted_ids
+    print(f"✓ Inserted {len(player_ids)} players")
 
-    # Insert sample match stats
+    # Insert sample price history (simulated daily snapshots for last 30 days)
+    import random
     now = datetime.now(timezone.utc)
-    match_stats = []
-    for i, aid in enumerate(athlete_ids):
+    price_history = []
+    for i, pid in enumerate(player_ids):
+        base = PLAYERS[i]["current_price"]
+        price = base
+        for day in range(30, 0, -1):
+            # Random walk around the base price
+            delta = random.uniform(-0.02, 0.025) * base
+            price = max(base * 0.7, min(base * 1.4, price + delta))
+            price_history.append({
+                "player_id": pid,
+                "price": round(price, 2),
+                "fundamental_value": round(base * (1 + random.uniform(-0.05, 0.1)), 2),
+                "performance_score": round(PLAYERS[i]["performance_score"] + random.uniform(-0.05, 0.05), 4),
+                "timestamp": now - timedelta(days=day),
+            })
+        # Final snapshot = current price
+        price_history.append({
+            "player_id": pid,
+            "price": PLAYERS[i]["current_price"],
+            "fundamental_value": PLAYERS[i]["fundamental_value"],
+            "performance_score": PLAYERS[i]["performance_score"],
+            "timestamp": now,
+        })
+    await db.price_history.insert_many(price_history)
+    print(f"✓ Inserted {len(price_history)} price history records")
+
+    # Insert sample player matches
+    player_matches = []
+    for i, pid in enumerate(player_ids):
         for day_offset in range(5):
-            match_stats.append({
-                "athlete_id": aid,
-                "match_date": now - timedelta(days=day_offset * 7),
+            match_date = now - timedelta(days=day_offset * 7)
+            player_matches.append({
+                "player_id": pid,
+                "date": match_date.strftime("%Y-%m-%d"),
                 "stats": {
                     "score": round(0.6 + i * 0.05 + day_offset * 0.02, 2),
                     "actual_score": round(0.5 + i * 0.06 + day_offset * 0.01, 2),
@@ -176,11 +205,10 @@ async def seed():
                     "win_rate": round(0.6 + i * 0.04, 2),
                     "consistency_score": round(0.65 + i * 0.05, 2),
                 },
-                "manually_updated": False,
-                "created_at": now - timedelta(days=day_offset * 7),
+                "ingested_at": match_date,
             })
-    await db.match_stats.insert_many(match_stats)
-    print(f"✓ Inserted {len(match_stats)} match stat records")
+    await db.player_matches.insert_many(player_matches)
+    print(f"✓ Inserted {len(player_matches)} player match records")
 
     # Seed default sport configurations
     await sport_config_service.ensure_defaults(db)
@@ -189,9 +217,9 @@ async def seed():
 
     # Insert sample income events
     income_events = []
-    for aid in athlete_ids[:3]:
+    for pid in player_ids[:3]:
         income_events.append({
-            "athlete_id": aid,
+            "player_id": pid,
             "verified_income": 500_000.0,
             "income_date": now - timedelta(days=15),
             "distributed": False,

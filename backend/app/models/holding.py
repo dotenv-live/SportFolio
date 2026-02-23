@@ -6,7 +6,7 @@ from app.models.common import BaseDocument, PyObjectId
 
 class HoldingBase(BaseModel):
     user_id: PyObjectId
-    athlete_id: PyObjectId
+    player_id: PyObjectId
 
 
 class HoldingPublic(HoldingBase):
@@ -18,7 +18,7 @@ class HoldingPublic(HoldingBase):
 
 class HoldingInDB(BaseDocument):
     user_id: PyObjectId
-    athlete_id: PyObjectId
+    player_id: PyObjectId
     shares_owned: float = 0.0
     accrued_dividend: float = 0.0
     last_accrual_timestamp: datetime | None = None

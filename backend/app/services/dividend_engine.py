@@ -3,7 +3,7 @@ Dividend Engine – daily accrual of income to share-holders.
 
 When a verified income event is added:
     • 10 % → Investor pool (distributed proportionally by shares)
-    • 3 %  → Liquidity pool (added to athlete.liquidity_pool_balance)
+    • 3 %  → Liquidity pool (added to player.liquidity_pool_balance)
     • 2 %  → Platform reserve (not implemented yet – logged)
 
 Daily dividend accrual:
@@ -41,25 +41,25 @@ async def distribute_income_event(
     if event.get("distributed"):
         return {"status": "already_distributed"}
 
-    athlete_id = event["athlete_id"]
+    player_id = event["player_id"]
     income = event["verified_income"]
 
-    athlete = await db.athletes.find_one({"_id": athlete_id})
-    if athlete is None:
-        raise ValueError("Athlete not found")
+    player = await db.players.find_one({"_id": player_id})
+    if player is None:
+        raise ValueError("Player not found")
 
     investor_pool = settings.investor_income_share * income     # 10 %
     liquidity_add = settings.liquidity_income_share * income     # 3 %
     platform_reserve = settings.platform_income_share * income   # 2 %
 
     # Add to liquidity pool
-    await db.athletes.update_one(
-        {"_id": athlete_id},
+    await db.players.update_one(
+        {"_id": player_id},
         {"$inc": {"liquidity_pool_balance": liquidity_add}},
     )
 
     # Store per-share daily rate on the event for accrual
-    total_shares = athlete["total_shares"]
+    total_shares = player["total_shares"]
     # Assume income covers 30-day period by default; overridable via field
     days_in_period = event.get("period_days", 30)
     daily_rate_per_share = investor_pool / (days_in_period * total_shares) if total_shares > 0 else 0
@@ -83,24 +83,24 @@ async def distribute_income_event(
     }
 
 
-async def accrue_dividends_for_athlete(
+async def accrue_dividends_for_player(
     db: AsyncIOMotorDatabase,
-    athlete_id: str | ObjectId,
+    player_id: str | ObjectId,
     as_of: datetime | None = None,
 ) -> int:
     """
-    Walk every holding for *athlete_id* and accrue pending dividends
+    Walk every holding for *player_id* and accrue pending dividends
     based on time-weighted daily rate.
     Returns count of holdings updated.
     """
-    if isinstance(athlete_id, str):
-        athlete_id = ObjectId(athlete_id)
+    if isinstance(player_id, str):
+        player_id = ObjectId(player_id)
     if as_of is None:
         as_of = datetime.now(timezone.utc)
 
-    # Gather all distributed income events for this athlete
+    # Gather all distributed income events for this player
     events: List[dict] = []
-    async for ev in db.income_events.find({"athlete_id": athlete_id, "distributed": True}):
+    async for ev in db.income_events.find({"player_id": player_id, "distributed": True}):
         events.append(ev)
 
     if not events:
@@ -110,7 +110,7 @@ async def accrue_dividends_for_athlete(
     total_daily_rate = sum(e.get("daily_rate_per_share", 0) for e in events)
 
     updated = 0
-    async for holding in db.holdings.find({"athlete_id": athlete_id, "shares_owned": {"$gt": 0}}):
+    async for holding in db.holdings.find({"player_id": player_id, "shares_owned": {"$gt": 0}}):
         last_ts = holding.get("last_accrual_timestamp")
         if last_ts is None:
             last_ts = holding.get("created_at", as_of)
@@ -139,12 +139,12 @@ async def accrue_dividends_all(
     db: AsyncIOMotorDatabase,
     as_of: datetime | None = None,
 ) -> dict:
-    """Run daily accrual for every athlete that has distributed events."""
-    athlete_ids = await db.income_events.distinct("athlete_id", {"distributed": True})
+    """Run daily accrual for every player that has distributed events."""
+    player_ids = await db.income_events.distinct("player_id", {"distributed": True})
     total_updated = 0
-    for aid in athlete_ids:
-        total_updated += await accrue_dividends_for_athlete(db, aid, as_of)
-    return {"athletes_processed": len(athlete_ids), "holdings_updated": total_updated}
+    for pid in player_ids:
+        total_updated += await accrue_dividends_for_player(db, pid, as_of)
+    return {"players_processed": len(player_ids), "holdings_updated": total_updated}
 
 
 async def accrue_for_holding(
@@ -165,9 +165,9 @@ async def accrue_for_holding(
     if not holding:
         return 0.0
 
-    athlete_id = holding["athlete_id"]
+    player_id = holding["player_id"]
     events = []
-    async for ev in db.income_events.find({"athlete_id": athlete_id, "distributed": True}):
+    async for ev in db.income_events.find({"player_id": player_id, "distributed": True}):
         events.append(ev)
 
     total_daily_rate = sum(e.get("daily_rate_per_share", 0) for e in events)

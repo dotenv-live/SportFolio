@@ -9,7 +9,39 @@ Supported strategies:
 All outputs are clipped to [0, 1] for safe downstream usage.
 """
 import math
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+
+
+def resolve_dotpath(data: Dict[str, Any], path: str) -> Any:
+    """Resolve a dot-separated key path against a nested dict.
+
+    Examples
+    --------
+    >>> resolve_dotpath({"batting_stats": {"runs": 42}}, "batting_stats.runs")
+    42
+    >>> resolve_dotpath({"score": 0.8}, "score")
+    0.8
+    >>> resolve_dotpath({}, "batting_stats.runs") is None
+    True
+    """
+    parts = path.split(".")
+    current: Any = data
+    for part in parts:
+        if isinstance(current, dict):
+            current = current.get(part)
+        else:
+            return None
+        if current is None:
+            return None
+    return current
+
+
+def safe_float(value: Any) -> float:
+    """Convert *value* to float; return 0.0 on failure."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class MetricNormalizer:

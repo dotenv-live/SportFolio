@@ -15,7 +15,7 @@ router = APIRouter(prefix="/trade", tags=["trading"])
 
 
 class TradeRequest(BaseModel):
-    athlete_id: str
+    player_id: str
     shares: float = Field(gt=0)
 
 
@@ -29,7 +29,7 @@ async def buy(
         result = await buy_shares(
             db,
             user_id=current_user["_id"],
-            athlete_id=body.athlete_id,
+            player_id=body.player_id,
             shares=body.shares,
         )
         return result
@@ -47,7 +47,7 @@ async def sell(
         result = await sell_shares(
             db,
             user_id=current_user["_id"],
-            athlete_id=body.athlete_id,
+            player_id=body.player_id,
             shares=body.shares,
         )
         return result

@@ -58,7 +58,7 @@ class MLModelResolver:
         ai_weights : dict | None
             ``{"xgb": float, "lstm": float}`` from sport config.
         historical_stats : list[dict]
-            Match-stat documents for the athlete.
+            Player match documents for the player.
 
         Returns
         -------

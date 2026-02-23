@@ -139,49 +139,26 @@ sport_config_service = SportConfigService()
 # ------------------------------------------------------------------
 _DEFAULT_SPORTS: List[Dict[str, Any]] = [
     {
-        "name": "Football",
-        "metrics": [
-            {"key": "goals", "weight": 0.25, "normalization": "minmax"},
-            {"key": "assists", "weight": 0.20, "normalization": "minmax"},
-            {"key": "minutes_played", "weight": 0.15, "normalization": "minmax"},
-            {"key": "win_rate", "weight": 0.20, "normalization": "minmax"},
-            {"key": "consistency_score", "weight": 0.20, "normalization": "minmax"},
-        ],
-        "phi": 0.0,
-        "ai_weights": {"xgb": 0.6, "lstm": 0.4},
-    },
-    {
         "name": "Cricket",
         "metrics": [
-            {"key": "score", "weight": 0.30, "normalization": "minmax"},
-            {"key": "win_rate", "weight": 0.25, "normalization": "minmax"},
-            {"key": "consistency_score", "weight": 0.25, "normalization": "minmax"},
-            {"key": "minutes_played", "weight": 0.20, "normalization": "minmax"},
+            # Batting metrics
+            {"key": "batting_stats.runs", "weight": 0.15, "normalization": "minmax"},
+            {"key": "batting_stats.strike_rate", "weight": 0.08, "normalization": "minmax"},
+            {"key": "batting_stats.fours", "weight": 0.04, "normalization": "minmax"},
+            {"key": "batting_stats.sixes", "weight": 0.04, "normalization": "minmax"},
+            {"key": "batting_stats.balls_faced", "weight": 0.04, "normalization": "minmax"},
+            # Bowling metrics
+            {"key": "bowling_stats.wickets", "weight": 0.15, "normalization": "minmax"},
+            {"key": "bowling_stats.economy", "weight": 0.10, "normalization": "minmax"},
+            {"key": "bowling_stats.runs_conceded", "weight": 0.08, "normalization": "minmax"},
+            {"key": "bowling_stats.overs", "weight": 0.05, "normalization": "minmax"},
+            {"key": "bowling_stats.wides", "weight": 0.02, "normalization": "minmax"},
+            {"key": "bowling_stats.no_balls", "weight": 0.02, "normalization": "minmax"},
+            # Match context
+            {"key": "outcome.winner", "weight": 0.15, "normalization": "minmax"},
+            {"key": "batting_stats.not_out", "weight": 0.08, "normalization": "minmax"},
         ],
-        "phi": 0.0,
-        "ai_weights": {"xgb": 0.6, "lstm": 0.4},
-    },
-    {
-        "name": "Basketball",
-        "metrics": [
-            {"key": "score", "weight": 0.25, "normalization": "minmax"},
-            {"key": "assists", "weight": 0.20, "normalization": "minmax"},
-            {"key": "win_rate", "weight": 0.25, "normalization": "minmax"},
-            {"key": "minutes_played", "weight": 0.10, "normalization": "minmax"},
-            {"key": "consistency_score", "weight": 0.20, "normalization": "minmax"},
-        ],
-        "phi": 0.0,
-        "ai_weights": {"xgb": 0.6, "lstm": 0.4},
-    },
-    {
-        "name": "Tennis",
-        "metrics": [
-            {"key": "score", "weight": 0.30, "normalization": "minmax"},
-            {"key": "win_rate", "weight": 0.30, "normalization": "minmax"},
-            {"key": "consistency_score", "weight": 0.25, "normalization": "minmax"},
-            {"key": "minutes_played", "weight": 0.15, "normalization": "minmax"},
-        ],
-        "phi": 0.0,
+        "phi": 0.3,
         "ai_weights": {"xgb": 0.6, "lstm": 0.4},
     },
 ]

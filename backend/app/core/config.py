@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     liquidity_income_share: float = 0.03
     platform_income_share: float = 0.02
 
+    # Cricket performance cron schedule (UTC)
+    cricket_perf_cron_hour: int = 1
+    cricket_perf_cron_minute: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:

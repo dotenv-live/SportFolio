@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 
-def fraud_precheck(user_id: str, athlete_id: str, shares: float, price: float) -> Optional[str]:
+def fraud_precheck(user_id: str, player_id: str, shares: float, price: float) -> Optional[str]:
     """Hook for fraud detection. Return reason string if suspicious, else None."""
     # Placeholder for velocity checks, device fingerprinting, etc.
     if shares <= 0 or price <= 0:

@@ -1,5 +1,5 @@
 """
-XGBoost model placeholder for athlete performance prediction.
+XGBoost model placeholder for player performance prediction.
 
 In production, replace with a trained XGBoost model loaded from disk.
 """
@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 
 
 class XGBoostModel:
-    """Placeholder XGBoost model for predicting athlete performance."""
+    """Placeholder XGBoost model for predicting player performance."""
 
     def __init__(self) -> None:
         self.version = "mock-xgb-1"
