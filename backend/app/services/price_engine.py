@@ -1,0 +1,151 @@
+"""
+Price Engine – implements the full pricing model.
+
+Formulas:
+    Performance Score (PS) = weighted combination of:
+        actual_score, consistency, growth, fitness, ai_score
+
+    AI Score = weighted XGBoost + LSTM output (computed by AIPredictor)
+
+    Fundamental Value:
+        FV = base_value * (1 + alpha * PS)
+
+    Demand Impact:
+        float_shares = circulating_shares (shares held by investors)
+        DI = 1 + beta * ((buy_volume - sell_volume) / float_shares)
+
+    Raw Price:
+        P = FV * DI
+
+    Smoothed Price:
+        P_final = eta * P_new + (1 - eta) * P_old
+
+All parameters are stored per athlete and configurable.
+"""
+from typing import Any, Dict
+
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from bson import ObjectId
+
+from app.core.config import get_settings
+
+# ---------- Performance Score Weights ----------
+W_ACTUAL_SCORE = 0.30
+W_CONSISTENCY = 0.20
+W_GROWTH = 0.15
+W_FITNESS = 0.10
+W_AI_SCORE = 0.25
+
+
+def compute_performance_score(
+    actual_score: float,
+    consistency: float,
+    growth: float,
+    fitness: float,
+    ai_score: float,
+) -> float:
+    """
+    PS = w1*actual + w2*consistency + w3*growth + w4*fitness + w5*ai_score
+    All inputs expected in [0, 1]; output clipped to [0, 1].
+    """
+    ps = (
+        W_ACTUAL_SCORE * actual_score
+        + W_CONSISTENCY * consistency
+        + W_GROWTH * growth
+        + W_FITNESS * fitness
+        + W_AI_SCORE * ai_score
+    )
+    return max(0.0, min(1.0, ps))
+
+
+def compute_fundamental_value(base_value: float, alpha: float, ps: float) -> float:
+    """FV = B * (1 + alpha * PS)"""
+    return base_value * (1.0 + alpha * ps)
+
+
+def compute_demand_impact(
+    beta: float,
+    buy_volume: float,
+    sell_volume: float,
+    float_shares: float,
+) -> float:
+    """DI = 1 + beta * ((buy_vol - sell_vol) / float_shares)"""
+    if float_shares <= 0:
+        return 1.0
+    return 1.0 + beta * ((buy_volume - sell_volume) / float_shares)
+
+
+def compute_raw_price(fv: float, di: float) -> float:
+    """P = FV * DI"""
+    return max(0.01, fv * di)
+
+
+def smooth_price(p_new: float, p_old: float, eta: float | None = None) -> float:
+    """P_final = eta * P_new + (1 - eta) * P_old"""
+    if eta is None:
+        eta = get_settings().price_smoothing_eta
+    return eta * p_new + (1.0 - eta) * p_old
+
+
+async def recalculate_athlete_price(
+    db: AsyncIOMotorDatabase,
+    athlete_id: str | ObjectId,
+) -> Dict[str, Any]:
+    """
+    Full price recalculation pipeline for a single athlete.
+    Reads current doc, computes FV, DI, raw P, applies smoothing, persists.
+    Returns updated pricing fields.
+    """
+    if isinstance(athlete_id, str):
+        athlete_id = ObjectId(athlete_id)
+
+    doc = await db.athletes.find_one({"_id": athlete_id})
+    if doc is None:
+        raise ValueError(f"Athlete {athlete_id} not found")
+
+    # --- AI Score (may already be set externally or via /ai/retrain) ---
+    ai_score = doc.get("ai_score", 0.0)
+
+    # --- Derive sub-scores from latest match stats if available ---
+    latest_stat = await db.match_stats.find_one(
+        {"athlete_id": athlete_id},
+        sort=[("match_date", -1)],
+    )
+    actual_score = 0.5
+    consistency = 0.5
+    growth = 0.5
+    fitness = 0.5
+    if latest_stat and latest_stat.get("stats"):
+        s = latest_stat["stats"]
+        actual_score = float(s.get("actual_score", s.get("score", 0.5)))
+        consistency = float(s.get("consistency", 0.5))
+        growth = float(s.get("growth", 0.5))
+        fitness = float(s.get("fitness", 0.5))
+
+    ps = compute_performance_score(actual_score, consistency, growth, fitness, ai_score)
+    fv = compute_fundamental_value(doc["base_value"], doc["alpha"], ps)
+
+    float_shares = doc.get("circulating_shares", doc["total_shares"])
+    di = compute_demand_impact(
+        doc["beta"],
+        doc.get("buy_volume", 0.0),
+        doc.get("sell_volume", 0.0),
+        float_shares,
+    )
+    p_raw = compute_raw_price(fv, di)
+
+    p_old = doc.get("current_price", p_raw)
+    p_final = smooth_price(p_raw, p_old)
+
+    update_fields = {
+        "performance_score": ps,
+        "fundamental_value": fv,
+        "current_price": p_final,
+    }
+
+    await db.athletes.update_one(
+        {"_id": athlete_id},
+        {"$set": update_fields},
+    )
+
+    return {**update_fields, "raw_price": p_raw, "demand_impact": di}
