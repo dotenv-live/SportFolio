@@ -42,7 +42,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 MONGO_URI = os.getenv("MONGO_URI")
 if not MONGO_URI:
     sys.exit("ERROR: MONGO_URI is not set. Add it to dataset/.env or export it.")
-DB_NAME   = os.getenv("CRICKET_DB", "sportfolio")
+DB_NAME   = os.getenv("DB", "sportfolio")
 
 # Cricsheet base URL
 CS_BASE = "https://cricsheet.org"
@@ -459,7 +459,7 @@ def upsert_player(
     # Only store matches from the last 7 days in player_matches.
     # Career stats above already incorporate the full history.
     from datetime import timedelta
-    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=365)).strftime("%Y-%m-%d")
+    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=1095)).strftime("%Y-%m-%d")
     recent_matches = [
         ms for ms in match_stats
         if ms.get("date") and str(ms["date"]) >= cutoff_date
