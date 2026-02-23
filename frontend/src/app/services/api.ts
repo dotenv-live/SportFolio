@@ -2,8 +2,23 @@ import axios from 'axios';
 import type { Athlete, Investment, User, Order, Notification, PriceAlert } from '../data/types';
 
 // ─── Axios Instance ──────────────────────────────────────────────────
+// If VITE_API_URL is set to a remote URL, use it directly (bypassing Vite proxy)
+// Otherwise use the relative path which will be proxied by Vite dev server
+const getBaseURL = () => {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const basePath = import.meta.env.VITE_API_BASE_PATH || '/api/v1';
+  
+  // If API URL is remote (starts with http/https), use full URL
+  if (apiUrl && (apiUrl.startsWith('http://') || apiUrl.startsWith('https://'))) {
+    return `${apiUrl}${basePath}`;
+  }
+  
+  // Otherwise use relative path for Vite proxy
+  return basePath;
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_PATH || '/api/v1',
+  baseURL: getBaseURL(),
   headers: { 'Content-Type': 'application/json' },
 });
 
