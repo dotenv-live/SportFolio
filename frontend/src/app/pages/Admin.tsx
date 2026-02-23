@@ -6,17 +6,24 @@ import {
   Search, Bell, Settings, LogOut, UserCheck,
   ArrowUpRight, ArrowDownRight, Clock, CheckCircle
 } from 'lucide-react';
-import { mockAthletes, mockInvestments, mockUser, mockOrders } from '../data/mockData';
+import { AdminSkeleton } from '../components/skeletons';
+import { usePlayers, useHoldings, useTransactions } from '../hooks/useApi';
+import { useAuth } from '../context/AuthContext';
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState('overview');
+  const { data: athletes = [], isLoading: loadingAth } = usePlayers();
+  const { data: investments = [], isLoading: loadingInv } = useHoldings();
+  const { data: orders = [], isLoading: loadingOrd } = useTransactions(athletes);
+  const { user } = useAuth();
 
   // Calculate platform metrics
+  const isLoading = loadingAth || loadingInv || loadingOrd;
   const totalUsers = 1247; // Mock data
-  const totalInvestments = mockInvestments.reduce((sum, inv) => sum + inv.currentValue, 0);
+  const totalInvestments = investments.reduce((sum, inv) => sum + inv.currentValue, 0);
   const totalRevenue = totalInvestments * 0.01; // 1% platform fee
-  const activeAthletes = mockAthletes.filter(a => a.unitsAvailable > 0).length;
-  const totalTransactions = mockOrders.length;
+  const activeAthletes = athletes.filter(a => a.unitsAvailable > 0).length;
+  const totalTransactions = orders.length;
   
   // Recent activity
   const recentActivity = [
@@ -118,6 +125,7 @@ export default function Admin() {
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
+        isLoading ? <AdminSkeleton /> : (
         <div className="px-4 py-4 space-y-4">
           {/* Key Metrics */}
           <div className="grid grid-cols-2 gap-3">
@@ -279,6 +287,7 @@ export default function Admin() {
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* Athletes Tab */}
@@ -301,7 +310,7 @@ export default function Admin() {
 
           {/* Athletes List */}
           <div className="space-y-2">
-            {mockAthletes.map((athlete) => (
+            {athletes.map((athlete) => (
               <div key={athlete.id} className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-4">
                 <div className="flex items-start gap-3">
                   <div className="w-12 h-12 rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0">
@@ -444,7 +453,7 @@ export default function Admin() {
 
           {/* Transactions List */}
           <div className="space-y-2">
-            {mockOrders.map((order) => {
+            {orders.map((order) => {
               const isBuy = order.type === 'BUY';
               return (
                 <div key={order.id} className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-4">

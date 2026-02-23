@@ -1,7 +1,10 @@
 import { Link } from 'react-router';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { mockInvestments, mockAthletes, mockUser, mockOrders, calculatePortfolioValue, calculateTotalROI, mockNotifications } from '../data/mockData';
+import { calculatePortfolioValue, calculateTotalROI } from '../data/types';
+import { PortfolioSkeleton } from '../components/skeletons';
+import { useHoldings, useTransactions, usePlayers, useNotifications } from '../hooks/useApi';
+import { useAuth } from '../context/AuthContext';
 import { TrendingUp, Search, Eye, EyeOff, BarChart3, Clock, CheckCircle, XCircle, ArrowUpDown, Bell } from 'lucide-react';
 import { Sparkline } from '../components/Sparkline';
 import { BottomNavigation } from '../components/BottomNavigation';
@@ -9,20 +12,25 @@ import { BottomNavigation } from '../components/BottomNavigation';
 type SortOption = 'name' | 'value' | 'returns' | 'invested';
 
 export default function Portfolio() {
+  const { data: investments = [], isLoading: loadingHoldings } = useHoldings();
+  const { data: athletes = [], isLoading: loadingAthletes } = usePlayers();
+  const { data: orders = [] } = useTransactions(athletes);
+  const { data: notifications = [] } = useNotifications();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('holdings');
   const [hideValues, setHideValues] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('value');
   const [showSortMenu, setShowSortMenu] = useState(false);
   
   // Calculate portfolio metrics
-  const portfolioValue = calculatePortfolioValue(mockInvestments);
-  const totalInvested = mockInvestments.reduce((sum, inv) => sum + inv.investedAmount, 0);
-  const totalROI = calculateTotalROI(mockInvestments);
+  const portfolioValue = calculatePortfolioValue(investments);
+  const totalInvested = investments.reduce((sum, inv) => sum + inv.investedAmount, 0);
+  const totalROI = calculateTotalROI(investments);
   const totalGain = portfolioValue - totalInvested;
 
   // Sort holdings
   const getSortedInvestments = () => {
-    const sorted = [...mockInvestments];
+    const sorted = [...investments];
     
     switch (sortBy) {
       case 'name':
@@ -69,7 +77,7 @@ export default function Portfolio() {
             </Link>
             <Link to="/investor">
               <button className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-black font-semibold text-sm">
-                {mockUser.name.charAt(0)}
+                {(user?.name ?? 'U').charAt(0)}
               </button>
             </Link>
           </div>
@@ -100,6 +108,7 @@ export default function Portfolio() {
 
       {/* Holdings Tab Content */}
       {activeTab === 'holdings' && (
+        loadingHoldings || loadingAthletes ? <PortfolioSkeleton /> : (
         <>
           {/* Portfolio Summary Card */}
           <div className="px-4 py-4">
@@ -107,7 +116,7 @@ export default function Portfolio() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <div className="text-xs text-neutral-500 mb-1 uppercase tracking-wide">
-                    Holdings ({mockInvestments.length})
+                    Holdings ({investments.length})
                   </div>
                   <div className="text-3xl font-bold mb-2">
                     {hideValues ? '• • • • •' : `₹${portfolioValue.toLocaleString()}`}
@@ -220,7 +229,7 @@ export default function Portfolio() {
           <div className="px-4 pb-4">
             <div className="space-y-0">
               {sortedInvestments.map((investment) => {
-                const athlete = mockAthletes.find((a) => a.id === investment.athleteId);
+                const athlete = athletes.find((a) => a.id === investment.athleteId);
                 const isGain = investment.roi >= 0;
                 const gainLoss = investment.currentValue - investment.investedAmount;
 
@@ -265,6 +274,7 @@ export default function Portfolio() {
             </div>
           </div>
         </>
+        )
       )}
 
       {/* Positions Tab */}
@@ -278,9 +288,9 @@ export default function Portfolio() {
       {activeTab === 'orders' && (
         <div className="px-4 py-4">
           <div className="space-y-0">
-            {mockOrders.map((order) => {
+            {orders.map((order) => {
               const isBuy = order.type === 'BUY';
-              const athlete = mockAthletes.find((a) => a.id === order.athleteId);
+              const athlete = athletes.find((a) => a.id === order.athleteId);
               const orderDate = new Date(order.timestamp);
               const formattedDate = orderDate.toLocaleDateString('en-US', { 
                 month: 'short', 

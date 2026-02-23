@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { mockAthletes, mockNotifications } from '../data/mockData';
+import { usePlayers, useNotifications } from '../hooks/useApi';
 import { ArrowLeft, TrendingUp, TrendingDown, Star, Bell, Plus, X, Search } from 'lucide-react';
 import { Sparkline } from '../components/Sparkline';
 import { BottomNavigation } from '../components/BottomNavigation';
@@ -11,15 +11,24 @@ interface WatchlistProps {
 }
 
 export default function Watchlist({ hideHeader = false }: WatchlistProps) {
-  const [watchlistedAthletes, setWatchlistedAthletes] = useState(
-    mockAthletes.filter(a => a.isWatchlisted)
-  );
-  const unreadNotifications = mockNotifications.filter(n => !n.read).length;
+  const { data: allAthletes = [] } = usePlayers();
+  const [watchlistedAthletes, setWatchlistedAthletes] = useState<string[]>([]);
+  const [initialized, setInitialized] = useState(false);
+  const { data: notifications = [] } = useNotifications();
+  const unreadNotifications = notifications.filter(n => !n.read).length;
+
+  // Initialize watchlist from athlete data (ones marked as watchlisted)
+  if (!initialized && allAthletes.length > 0) {
+    setWatchlistedAthletes(allAthletes.filter(a => a.isWatchlisted).map(a => a.id));
+    setInitialized(true);
+  }
+
+  const watchlistData = allAthletes.filter(a => watchlistedAthletes.includes(a.id));
 
   const [searchQuery, setSearchQuery] = useState('');
 
   // Filter by search query
-  const filteredAthletes = watchlistedAthletes.filter(athlete =>
+  const filteredAthletes = watchlistData.filter(athlete =>
     athlete.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     athlete.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -27,10 +36,8 @@ export default function Watchlist({ hideHeader = false }: WatchlistProps) {
   const handleRemoveFromWatchlist = (athleteId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // In real app, this would update the state/database
-    console.log('Remove from watchlist:', athleteId);
-    setWatchlistedAthletes(watchlistedAthletes.filter(a => a.id !== athleteId));
-    toast.success(`${athleteId} removed from watchlist`);
+    setWatchlistedAthletes(watchlistedAthletes.filter(id => id !== athleteId));
+    toast.success('Removed from watchlist');
   };
 
   return (
@@ -41,7 +48,7 @@ export default function Watchlist({ hideHeader = false }: WatchlistProps) {
           <div className="flex items-center justify-between mb-3">
             <div>
               <h1 className="font-bold text-lg">Watchlist</h1>
-              <p className="text-xs text-neutral-500">{watchlistedAthletes.length} athletes</p>
+              <p className="text-xs text-neutral-500">{watchlistData.length} athletes</p>
             </div>
             <Link to="/marketplace">
               <button className="text-sm text-emerald-500 font-medium">

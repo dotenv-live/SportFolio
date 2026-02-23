@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { mockNotifications, mockInvestments, mockUser, calculatePortfolioValue, calculateTotalROI, mockAthletes, mockPriceAlerts } from '../data/mockData';
+import { usePlayers, useHoldings, useNotifications } from '../hooks/useApi';
+import { useAuth } from '../context/AuthContext';
+import { calculatePortfolioValue, calculateTotalROI } from '../data/types';
+import { DashboardSkeleton } from '../components/skeletons';
 import { Bell, Search, TrendingUp, ChevronRight } from 'lucide-react';
 import { Sparkline } from '../components/Sparkline';
 import { Input } from '../components/ui/input';
@@ -13,7 +16,8 @@ type Tab = 'dashboard' | 'explore' | 'watchlist' | 'alerts';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const unreadNotifications = mockNotifications.filter(n => !n.read).length;
+  const { data: notifications = [] } = useNotifications();
+  const unreadNotifications = notifications.filter(n => !n.read).length;
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
@@ -86,9 +90,15 @@ export default function Home() {
 
 // Dashboard Content (without header - already in Home)
 function DashboardContent() {
-  const portfolioValue = calculatePortfolioValue(mockInvestments);
-  const totalInvested = mockInvestments.reduce((sum, inv) => sum + inv.investedAmount, 0);
-  const totalROI = calculateTotalROI(mockInvestments);
+  const { data: investments, isLoading: loadingInv } = useHoldings();
+  const { data: athletes, isLoading: loadingAth } = usePlayers();
+  const { user } = useAuth();
+
+  if (loadingInv || loadingAth || !investments || !athletes) return <DashboardSkeleton />;
+
+  const portfolioValue = calculatePortfolioValue(investments);
+  const totalInvested = investments.reduce((sum, inv) => sum + inv.investedAmount, 0);
+  const totalROI = calculateTotalROI(investments);
   const totalGain = portfolioValue - totalInvested;
 
   return (
@@ -116,12 +126,12 @@ function DashboardContent() {
           </div>
           <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
             <div className="text-xs text-neutral-500 mb-1">Holdings</div>
-            <div className="text-base font-semibold">{mockInvestments.length}</div>
+            <div className="text-base font-semibold">{investments.length}</div>
           </div>
           <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
             <div className="text-xs text-neutral-500 mb-1">Revenue</div>
             <div className="text-base font-semibold text-emerald-500">
-              ₹{mockInvestments.reduce((sum, inv) => sum + inv.revenueEarned, 0).toLocaleString()}
+              ₹{investments.reduce((sum, inv) => sum + inv.revenueEarned, 0).toLocaleString()}
             </div>
           </div>
         </div>
@@ -140,8 +150,8 @@ function DashboardContent() {
         </div>
 
         <div className="space-y-0">
-          {mockInvestments.map((investment) => {
-            const athlete = mockAthletes.find((a) => a.id === investment.athleteId);
+          {investments.map((investment) => {
+            const athlete = athletes.find((a) => a.id === investment.athleteId);
             const isGain = investment.roi >= 0;
 
             return (
@@ -203,7 +213,7 @@ function DashboardContent() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {mockAthletes
+          {athletes
             .filter((a) => Math.abs(a.priceChange24h) > 1)
             .slice(0, 4)
             .map((athlete) => {

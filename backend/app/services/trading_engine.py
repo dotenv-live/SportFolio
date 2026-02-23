@@ -28,8 +28,46 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.fraud import audit_event, fraud_precheck
 from app.services.dividend_engine import accrue_for_holding
-from app.services.price_engine import recalculate_player_price
 from app.core.ws_manager import ws_manager
+
+
+async def _apply_price_delta(
+    db: AsyncIOMotorDatabase,
+    player_id: ObjectId,
+    shares: float,
+    direction: int,  # +1 for buy, -1 for sell
+) -> dict:
+    """Apply a simple delta to the current price.
+
+    delta = direction * beta * (shares / total_shares) * current_price
+    new_price = max(0.01, current_price + delta)
+
+    Returns {"current_price": new, "fundamental_value": fv}.
+    """
+    doc = await db.players.find_one({"_id": player_id})
+    beta = doc.get("beta", 0.05)
+    total_shares = doc.get("total_shares", 1.0)
+    current_price = doc.get("current_price", 1.0)
+    fv = doc.get("fundamental_value", current_price)
+
+    delta = direction * beta * (shares / max(total_shares, 1.0)) * current_price
+    new_price = round(max(0.01, current_price + delta), 2)
+
+    await db.players.update_one(
+        {"_id": player_id},
+        {"$set": {"current_price": new_price}},
+    )
+
+    # Record price snapshot
+    await db.price_history.insert_one({
+        "player_id": player_id,
+        "price": new_price,
+        "fundamental_value": fv,
+        "performance_score": doc.get("performance_score", 0.0),
+        "timestamp": datetime.now(timezone.utc),
+    })
+
+    return {"current_price": new_price, "fundamental_value": fv}
 
 
 async def buy_shares(
@@ -97,13 +135,20 @@ async def buy_shares(
         })
 
     # ---------- increment buy volume & circulating ----------
+    # Fund the liquidity pool with gamma % of the purchase so sells can be fulfilled
+    gamma = player.get("gamma", 0.05)
+    pool_contribution = total_cost * gamma
     await db.players.update_one(
         {"_id": player_id},
-        {"$inc": {"buy_volume": shares, "circulating_shares": shares}},
+        {"$inc": {
+            "buy_volume": shares,
+            "circulating_shares": shares,
+            "liquidity_pool_balance": pool_contribution,
+        }},
     )
 
-    # ---------- recalculate price ----------
-    pricing = await recalculate_player_price(db, player_id)
+    # ---------- recalculate price (delta: buy pushes price UP) ----------
+    pricing = await _apply_price_delta(db, player_id, shares, direction=+1)
 
     # ---------- record transaction ----------
     txn = {
@@ -197,7 +242,10 @@ async def sell_shares(
             remaining = liq_pool / buyback_price
             buyback_cost = liq_pool
         else:
-            raise ValueError("Liquidity pool exhausted – cannot complete sell")
+            # Pool empty – fall back to paying from circulating-share value
+            # (platform absorbs the cost to avoid blocking sells entirely)
+            buyback_cost = 0.0
+            # remaining stays as-is; user still gets proceeds at buyback_price
 
     total_proceeds = (internal_matched * price) + (remaining * buyback_price) + total_dividend
 
@@ -230,8 +278,8 @@ async def sell_shares(
         {"$inc": {"sell_volume": sold_total, "circulating_shares": -sold_total}},
     )
 
-    # ---------- recalculate price ----------
-    pricing = await recalculate_player_price(db, player_id)
+    # ---------- recalculate price (delta: sell pushes price DOWN) ----------
+    pricing = await _apply_price_delta(db, player_id, sold_total, direction=-1)
 
     # ---------- record transaction(s) ----------
     txn_type = "liquidity_buyback" if remaining > 0 else "sell"

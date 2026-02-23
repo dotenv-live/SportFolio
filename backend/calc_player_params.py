@@ -303,21 +303,57 @@ def calc_ai_score(a: dict) -> float:
     return round(clamp(raw), 4)
 
 
+def calc_total_shares(a: dict) -> float:
+    """Total share supply (500–10,000).
+
+    More established players get more shares to provide deeper liquidity.
+    Driven by matches, runs, wickets, and overall impact.
+
+    raw = 0.35 * norm(matches, 0, 500)
+        + 0.25 * norm(runs, 0, 15000)
+        + 0.20 * norm(wickets, 0, 500)
+        + 0.20 * norm(bat_innings + bowl_innings, 0, 600)
+    total_shares = 500 + raw * 9500
+    """
+    raw = (
+        0.35 * norm(a["matches"], 0, 500)
+        + 0.25 * norm(a["runs"], 0, 15_000)
+        + 0.20 * norm(a["wickets"], 0, 500)
+        + 0.20 * norm(a["total_innings"], 0, 600)
+    )
+    return round(500 + raw * 9500, 0)
+
+
+def calc_liquidity_pool_balance(total_shares: float, current_price: float) -> float:
+    """Seed liquidity pool at 15% of total market cap.
+
+    Ensures there is enough in the pool for AMM buybacks on sells.
+    liquidity_pool_balance = 0.15 * total_shares * current_price
+    """
+    return round(0.15 * total_shares * current_price, 2)
+
+
 def calculate_all(career_stats: dict) -> dict:
     """Return all six computed parameters for a player's career_stats."""
     a = aggregate(career_stats)
     ps = calc_performance_score(a)
     ai = calc_ai_score(a)
     bv = calc_base_value(a)
+    alpha = calc_alpha(a)
+    cp = round(bv * (1 + alpha * ps), 2)
+    ts = calc_total_shares(a)
+    lpb = calc_liquidity_pool_balance(ts, cp)
     return dict(
         base_value=bv,
-        alpha=calc_alpha(a),
+        alpha=alpha,
         beta=calc_beta(a),
         gamma=calc_gamma(a),
         performance_score=ps,
         ai_score=ai,
-        fundamental_value=round(bv * (1 + calc_alpha(a) * ps), 2),
-        current_price=round(bv * (1 + calc_alpha(a) * ps), 2),
+        fundamental_value=cp,
+        current_price=cp,
+        total_shares=ts,
+        liquidity_pool_balance=lpb,
     )
 
 
@@ -360,6 +396,7 @@ async def run(player_id: str | None = None):
         print(f"      base_value={params['base_value']}  alpha={params['alpha']}  beta={params['beta']}  gamma={params['gamma']}")
         print(f"      performance_score={params['performance_score']}  ai_score={params['ai_score']}")
         print(f"      fundamental_value={params['fundamental_value']}  current_price={params['current_price']}")
+        print(f"      total_shares={params['total_shares']}  liquidity_pool_balance={params['liquidity_pool_balance']}")
 
     if updated == 0:
         if player_id:

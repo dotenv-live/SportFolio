@@ -10,9 +10,11 @@ Formulas:
     Fundamental Value:
         FV = base_value * (1 + alpha * PS)
 
-    Demand Impact:
-        float_shares = circulating_shares (shares held by investors)
-        DI = 1 + beta * ((buy_volume - sell_volume) / float_shares)
+    Demand Impact (used by cron recalculation only):
+        DI = 1 + beta * (circulating_shares / total_shares)
+
+    Trade-time pricing uses a simple delta model instead
+    (see trading_engine._apply_price_delta).
 
     Raw Price:
         P = FV * DI
@@ -68,14 +70,18 @@ def compute_fundamental_value(base_value: float, alpha: float, ps: float) -> flo
 
 def compute_demand_impact(
     beta: float,
-    buy_volume: float,
-    sell_volume: float,
-    float_shares: float,
+    circulating_shares: float,
+    total_shares: float,
 ) -> float:
-    """DI = 1 + beta * ((buy_vol - sell_vol) / float_shares)"""
-    if float_shares <= 0:
+    """DI = 1 + beta * (circulating / total)
+
+    Uses the ratio of circulating shares to total shares as the demand
+    signal.  Buys increase circulating → DI rises → price rises.
+    Sells decrease circulating → DI falls → price falls.
+    """
+    if total_shares <= 0:
         return 1.0
-    return 1.0 + beta * ((buy_volume - sell_volume) / float_shares)
+    return 1.0 + beta * (circulating_shares / total_shares)
 
 
 def compute_raw_price(fv: float, di: float) -> float:
@@ -138,12 +144,11 @@ async def recalculate_player_price(
     ps = compute_performance_score(actual_score, consistency, growth, fitness, ai_score)
     fv = compute_fundamental_value(doc.get("base_value", 50.0), doc.get("alpha", 0.8), ps)
 
-    float_shares = doc.get("circulating_shares", doc.get("total_shares", 1.0))
+    float_shares = doc.get("circulating_shares", 0.0)
     di = compute_demand_impact(
         doc.get("beta", 0.05),
-        doc.get("buy_volume", 0.0),
-        doc.get("sell_volume", 0.0),
         float_shares,
+        doc.get("total_shares", 1.0),
     )
     p_raw = compute_raw_price(fv, di)
 
