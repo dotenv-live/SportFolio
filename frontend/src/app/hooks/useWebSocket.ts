@@ -17,8 +17,18 @@ import type { Athlete } from '../data/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-/** Resolve the WS URL respecting the Vite dev proxy. */
+/** Resolve the WS URL respecting the Vite dev proxy or remote API. */
 function wsUrl(path: string): string {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  
+  // If API URL is remote, construct WebSocket URL from it
+  if (apiUrl && (apiUrl.startsWith('http://') || apiUrl.startsWith('https://'))) {
+    const wsProto = apiUrl.startsWith('https://') ? 'wss' : 'ws';
+    const host = apiUrl.replace(/^https?:\/\//, '');
+    return `${wsProto}://${host}${path}`;
+  }
+  
+  // Otherwise use relative path for Vite proxy (local development)
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   return `${proto}://${window.location.host}${path}`;
 }
