@@ -1,18 +1,59 @@
 import { Link } from 'react-router';
 import { useState } from 'react';
-import { mockInvestments, mockAthletes, mockUser, calculatePortfolioValue, calculateTotalROI } from '../data/mockData';
-import { TrendingUp, Search, Eye, BarChart3, MoreVertical } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { mockInvestments, mockAthletes, mockUser, mockOrders, calculatePortfolioValue, calculateTotalROI, mockNotifications } from '../data/mockData';
+import { TrendingUp, Search, Eye, EyeOff, BarChart3, Clock, CheckCircle, XCircle, ArrowUpDown, Bell } from 'lucide-react';
 import { Sparkline } from '../components/Sparkline';
+import { BottomNavigation } from '../components/BottomNavigation';
+
+type SortOption = 'name' | 'value' | 'returns' | 'invested';
 
 export default function Portfolio() {
   const [activeTab, setActiveTab] = useState('holdings');
+  const [hideValues, setHideValues] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>('value');
+  const [showSortMenu, setShowSortMenu] = useState(false);
   
   // Calculate portfolio metrics
   const portfolioValue = calculatePortfolioValue(mockInvestments);
   const totalInvested = mockInvestments.reduce((sum, inv) => sum + inv.investedAmount, 0);
   const totalROI = calculateTotalROI(mockInvestments);
   const totalGain = portfolioValue - totalInvested;
-  const oneDayReturns = -2340; // Mock 1-day returns
+
+  // Sort holdings
+  const getSortedInvestments = () => {
+    const sorted = [...mockInvestments];
+    
+    switch (sortBy) {
+      case 'name':
+        return sorted.sort((a, b) => a.athleteName.localeCompare(b.athleteName));
+      case 'value':
+        return sorted.sort((a, b) => b.currentValue - a.currentValue);
+      case 'returns':
+        return sorted.sort((a, b) => b.roi - a.roi);
+      case 'invested':
+        return sorted.sort((a, b) => b.investedAmount - a.investedAmount);
+      default:
+        return sorted;
+    }
+  };
+
+  const sortedInvestments = getSortedInvestments();
+
+  const getSortLabel = () => {
+    switch (sortBy) {
+      case 'name':
+        return 'Name (A-Z)';
+      case 'value':
+        return 'Current value';
+      case 'returns':
+        return 'Returns (%)';
+      case 'invested':
+        return 'Invested amount';
+      default:
+        return 'Current value';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-black text-white pb-24">
@@ -68,37 +109,45 @@ export default function Portfolio() {
                   <div className="text-xs text-neutral-500 mb-1 uppercase tracking-wide">
                     Holdings ({mockInvestments.length})
                   </div>
-                  <div className="text-3xl font-bold mb-2">₹{portfolioValue.toLocaleString()}</div>
+                  <div className="text-3xl font-bold mb-2">
+                    {hideValues ? '• • • • •' : `₹${portfolioValue.toLocaleString()}`}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="w-8 h-8 flex items-center justify-center hover:bg-white/5 rounded-lg transition-colors">
-                    <Eye className="w-4 h-4 text-neutral-400" />
+                  <button 
+                    onClick={() => setHideValues(!hideValues)}
+                    className="w-8 h-8 flex items-center justify-center hover:bg-white/5 rounded-lg transition-colors"
+                  >
+                    {hideValues ? (
+                      <EyeOff className="w-4 h-4 text-neutral-400" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-neutral-400" />
+                    )}
                   </button>
-                  <button className="w-8 h-8 flex items-center justify-center hover:bg-white/5 rounded-lg transition-colors">
-                    <BarChart3 className="w-4 h-4 text-neutral-400" />
-                  </button>
-                  <button className="w-8 h-8 flex items-center justify-center hover:bg-white/5 rounded-lg transition-colors">
-                    <MoreVertical className="w-4 h-4 text-neutral-400" />
-                  </button>
+                  <Link to="/analytics">
+                    <button className="w-8 h-8 flex items-center justify-center hover:bg-white/5 rounded-lg transition-colors">
+                      <BarChart3 className="w-4 h-4 text-neutral-400" />
+                    </button>
+                  </Link>
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-neutral-500">1D returns</span>
-                  <span className={`text-sm font-medium ${oneDayReturns >= 0 ? 'text-red-500' : 'text-red-500'}`}>
-                    {oneDayReturns >= 0 ? '-' : '-'}₹{Math.abs(oneDayReturns).toLocaleString()} ({(oneDayReturns / portfolioValue * 100).toFixed(2)}%)
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
                   <span className="text-sm text-neutral-500">Total returns</span>
-                  <span className={`text-sm font-medium ${totalGain >= 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                    {totalGain >= 0 ? '-' : ''}₹{Math.abs(totalGain).toLocaleString()} ({totalROI.toFixed(2)}%)
+                  <span className={`text-sm font-medium ${totalGain >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {hideValues ? '• • • • •' : (
+                      <>
+                        {totalGain >= 0 ? '+' : ''}₹{Math.abs(totalGain).toLocaleString()} ({totalROI.toFixed(2)}%)
+                      </>
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-neutral-500">Invested</span>
-                  <span className="text-sm font-medium">₹{totalInvested.toLocaleString()}</span>
+                  <span className="text-sm font-medium">
+                    {hideValues ? '• • • • •' : `₹${totalInvested.toLocaleString()}`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -106,18 +155,71 @@ export default function Portfolio() {
 
           {/* Sort Options */}
           <div className="px-4 py-2 flex items-center justify-between">
-            <button className="text-sm text-neutral-400 flex items-center gap-1">
+            <button 
+              onClick={() => setShowSortMenu(!showSortMenu)}
+              className="text-sm text-neutral-400 flex items-center gap-1 hover:text-white transition-colors"
+            >
               <span className="border-b border-dashed border-neutral-600">Sort</span>
+              <ArrowUpDown className="w-3 h-3" />
             </button>
-            <button className="text-sm text-neutral-400 flex items-center gap-1">
-              <span className="border-b border-dashed border-neutral-600">Current (invested)</span>
-            </button>
+            <span className="text-sm text-neutral-400">
+              {getSortLabel()}
+            </span>
           </div>
+
+          {/* Sort Menu */}
+          <AnimatePresence>
+            {showSortMenu && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowSortMenu(false)}
+                  className="fixed inset-0 bg-black/60 z-40"
+                />
+                <motion.div
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                  className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-white/[0.08] rounded-t-3xl z-50 p-6"
+                >
+                  <div className="mb-4">
+                    <h3 className="text-lg font-bold">Sort by</h3>
+                  </div>
+                  <div className="space-y-2">
+                    {[
+                      { key: 'value' as SortOption, label: 'Current value' },
+                      { key: 'returns' as SortOption, label: 'Returns (%)' },
+                      { key: 'invested' as SortOption, label: 'Invested amount' },
+                      { key: 'name' as SortOption, label: 'Name (A-Z)' },
+                    ].map((option) => (
+                      <button
+                        key={option.key}
+                        onClick={() => {
+                          setSortBy(option.key);
+                          setShowSortMenu(false);
+                        }}
+                        className={`w-full text-left px-4 py-3 rounded-xl transition-colors ${
+                          sortBy === option.key
+                            ? 'bg-white/10 text-white'
+                            : 'hover:bg-white/5 text-neutral-400'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
 
           {/* Holdings List */}
           <div className="px-4 pb-4">
             <div className="space-y-0">
-              {mockInvestments.map((investment) => {
+              {sortedInvestments.map((investment) => {
                 const athlete = mockAthletes.find((a) => a.id === investment.athleteId);
                 const isGain = investment.roi >= 0;
                 const gainLoss = investment.currentValue - investment.investedAmount;
@@ -129,7 +231,9 @@ export default function Portfolio() {
                         {/* Left: Name & Units */}
                         <div className="flex-1">
                           <div className="font-medium text-sm mb-0.5">{investment.athleteName}</div>
-                          <div className="text-xs text-neutral-500">{investment.units} shares</div>
+                          <div className="text-xs text-neutral-500">
+                            {hideValues ? '• • • • •' : `${investment.units} shares`}
+                          </div>
                         </div>
 
                         {/* Center: Sparkline */}
@@ -137,7 +241,7 @@ export default function Portfolio() {
                           {athlete?.priceHistory && (
                             <Sparkline
                               data={athlete.priceHistory}
-                              color={isGain ? '#ef4444' : '#10b981'}
+                              color={isGain ? '#10b981' : '#ef4444'}
                               width={70}
                               height={28}
                             />
@@ -147,10 +251,10 @@ export default function Portfolio() {
                         {/* Right: Value & Gain/Loss */}
                         <div className="text-right flex-shrink-0">
                           <div className="font-semibold text-sm mb-0.5">
-                            ₹{investment.currentValue.toLocaleString()}
+                            {hideValues ? '• • • • •' : `₹${investment.currentValue.toLocaleString()}`}
                           </div>
                           <div className={`text-xs font-medium ${isGain ? 'text-emerald-500' : 'text-red-500'}`}>
-                            ({isGain ? '+' : ''}₹{Math.abs(gainLoss).toLocaleString()})
+                            {hideValues ? '• • • • •' : `${isGain ? '+' : ''}₹${Math.abs(gainLoss).toLocaleString()}`}
                           </div>
                         </div>
                       </div>
@@ -172,46 +276,63 @@ export default function Portfolio() {
 
       {/* Orders Tab */}
       {activeTab === 'orders' && (
-        <div className="px-4 py-12 text-center">
-          <div className="text-neutral-500 text-sm">No recent orders</div>
+        <div className="px-4 py-4">
+          <div className="space-y-0">
+            {mockOrders.map((order) => {
+              const isBuy = order.type === 'BUY';
+              const athlete = mockAthletes.find((a) => a.id === order.athleteId);
+              const orderDate = new Date(order.timestamp);
+              const formattedDate = orderDate.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+
+              return (
+                <div key={order.id} className="py-3 border-b border-white/[0.05]">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-sm">{order.athleteName}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
+                        }`}>
+                          {order.type}
+                        </span>
+                      </div>
+                      <div className="text-xs text-neutral-500 flex items-center gap-2">
+                        <Clock className="w-3 h-3" />
+                        {formattedDate}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="flex items-center gap-1 justify-end mb-1">
+                        {order.status === 'Completed' && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                        {order.status === 'Pending' && <Clock className="w-4 h-4 text-yellow-500" />}
+                        {order.status === 'Failed' && <XCircle className="w-4 h-4 text-red-500" />}
+                        <span className={`text-xs font-medium ${
+                          order.status === 'Completed' ? 'text-emerald-500' :
+                          order.status === 'Pending' ? 'text-yellow-500' : 'text-red-500'
+                        }`}>
+                          {order.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-neutral-500">{order.units} units @ ₹{order.pricePerUnit.toFixed(2)}</span>
+                    <span className="font-medium">₹{order.totalAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-white/[0.08] px-4 py-3 safe-area-bottom">
-        <div className="flex items-center justify-around">
-          <Link to="/dashboard" className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-            </div>
-            <span className="text-[10px] text-neutral-500">Home</span>
-          </Link>
-          <Link to="/marketplace" className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-neutral-500" />
-            </div>
-            <span className="text-[10px] text-neutral-500">Explore</span>
-          </Link>
-          <Link to="/portfolio" className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <span className="text-[10px] text-white font-medium">Holdings</span>
-          </Link>
-          <Link to="/investor" className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-            <span className="text-[10px] text-neutral-500">Profile</span>
-          </Link>
-        </div>
-      </div>
+      <BottomNavigation />
     </div>
   );
 }

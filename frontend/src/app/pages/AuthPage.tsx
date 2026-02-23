@@ -20,7 +20,7 @@ export default function AuthPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (userType === 'investor') {
-      navigate('/dashboard');
+      navigate('/home');
     } else {
       navigate('/athlete-dashboard');
     }

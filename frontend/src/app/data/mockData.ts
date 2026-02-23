@@ -16,6 +16,7 @@ export interface Athlete {
   growthRate: number;
   priceChange24h: number; // Added for trading platform feel
   imageUrl: string;
+  isWatchlisted?: boolean; // For watchlist feature
   stats: {
     matches: number;
     runs?: number;
@@ -64,6 +65,21 @@ export interface User {
   email: string;
   role: 'investor' | 'athlete' | 'admin';
   walletBalance: number;
+  joinedAt: string;
+}
+
+export interface Order {
+  id: string;
+  athleteId: string;
+  athleteName: string;
+  type: 'BUY' | 'SELL';
+  units: number;
+  pricePerUnit: number;
+  totalAmount: number;
+  fee: number;
+  status: 'Completed' | 'Pending' | 'Failed';
+  timestamp: string;
+  orderId: string;
 }
 
 export const mockAthletes: Athlete[] = [
@@ -85,6 +101,7 @@ export const mockAthletes: Athlete[] = [
     growthRate: 12.5,
     priceChange24h: 2.5,
     imageUrl: 'https://images.unsplash.com/photo-1707549617870-e311a2274cd0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjBjcmlja2V0JTIwcGxheWVyJTIwbWFsZSUyMGF0aGxldGV8ZW58MXx8fHwxNzcxODQxMTYxfDA&ixlib=rb-4.1.0&q=80&w=1080',
+    isWatchlisted: true,
     stats: {
       matches: 45,
       runs: 2340,
@@ -371,11 +388,12 @@ export const mockInvestments: Investment[] = [
 ];
 
 export const mockUser: User = {
-  id: 'user-1',
+  id: '1',
   name: 'Rahul Kumar',
-  email: 'rahul.kumar@example.com',
+  email: 'rahul@example.com',
   role: 'investor',
-  walletBalance: 50000,
+  walletBalance: 125000,
+  joinedAt: '2025-12-15',
 };
 
 // Helper function to calculate portfolio value
@@ -403,3 +421,262 @@ export function getRiskColor(risk: string): string {
       return '#8B949E';
   }
 }
+
+// Mock orders data
+export const mockOrders: Order[] = [
+  {
+    id: 'ord-1',
+    athleteId: '1',
+    athleteName: 'Arjun Sharma',
+    type: 'BUY',
+    units: 50,
+    pricePerUnit: 200,
+    totalAmount: 10000,
+    fee: 100,
+    status: 'Completed',
+    timestamp: '2026-02-22T14:30:00Z',
+    orderId: 'AGE202602220001',
+  },
+  {
+    id: 'ord-2',
+    athleteId: '3',
+    athleteName: 'Rohan Verma',
+    type: 'BUY',
+    units: 30,
+    pricePerUnit: 250,
+    totalAmount: 7500,
+    fee: 75,
+    status: 'Completed',
+    timestamp: '2026-02-21T10:15:00Z',
+    orderId: 'AGE202602210001',
+  },
+  {
+    id: 'ord-3',
+    athleteId: '2',
+    athleteName: 'Priya Nair',
+    type: 'SELL',
+    units: 20,
+    pricePerUnit: 150,
+    totalAmount: 3000,
+    fee: 15,
+    status: 'Completed',
+    timestamp: '2026-02-20T16:45:00Z',
+    orderId: 'AGE202602200001',
+  },
+  {
+    id: 'ord-4',
+    athleteId: '6',
+    athleteName: 'Ananya Reddy',
+    type: 'BUY',
+    units: 40,
+    pricePerUnit: 190,
+    totalAmount: 7600,
+    fee: 76,
+    status: 'Completed',
+    timestamp: '2026-02-19T11:20:00Z',
+    orderId: 'AGE202602190001',
+  },
+  {
+    id: 'ord-5',
+    athleteId: '4',
+    athleteName: 'Kavya Patel',
+    type: 'BUY',
+    units: 25,
+    pricePerUnit: 180,
+    totalAmount: 4500,
+    fee: 45,
+    status: 'Pending',
+    timestamp: '2026-02-23T09:00:00Z',
+    orderId: 'AGE202602230001',
+  },
+  {
+    id: 'ord-6',
+    athleteId: '5',
+    athleteName: 'Vikram Singh',
+    type: 'BUY',
+    units: 15,
+    pricePerUnit: 125,
+    totalAmount: 1875,
+    fee: 18.75,
+    status: 'Failed',
+    timestamp: '2026-02-18T13:30:00Z',
+    orderId: 'AGE202602180001',
+  },
+];
+
+// Notification types
+export interface Notification {
+  id: string;
+  type: 'transaction' | 'alert' | 'update' | 'system';
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  athleteId?: string;
+  athleteName?: string;
+  icon?: string;
+}
+
+// Price Alert types
+export interface PriceAlert {
+  id: string;
+  athleteId: string;
+  athleteName: string;
+  athleteImage: string;
+  condition: 'above' | 'below' | 'change';
+  targetPrice?: number;
+  changePercent?: number;
+  currentPrice: number;
+  isActive: boolean;
+  createdAt: string;
+  triggeredAt?: string;
+}
+
+// Mock Notifications
+export const mockNotifications: Notification[] = [
+  {
+    id: 'notif-1',
+    type: 'alert',
+    title: 'Price Alert Triggered',
+    message: 'Arjun Sharma reached your target price of ₹205',
+    timestamp: '2026-02-23T10:30:00Z',
+    read: false,
+    athleteId: '1',
+    athleteName: 'Arjun Sharma',
+  },
+  {
+    id: 'notif-2',
+    type: 'transaction',
+    title: 'Transaction Successful',
+    message: 'You bought 50 units of Arjun Sharma at ₹200/unit',
+    timestamp: '2026-02-22T14:30:00Z',
+    read: false,
+    athleteId: '1',
+    athleteName: 'Arjun Sharma',
+  },
+  {
+    id: 'notif-3',
+    type: 'update',
+    title: 'Match Performance Update',
+    message: 'Rohan Verma took 4 wickets in today\'s match vs Mumbai Indians',
+    timestamp: '2026-02-22T18:45:00Z',
+    read: true,
+    athleteId: '3',
+    athleteName: 'Rohan Verma',
+  },
+  {
+    id: 'notif-4',
+    type: 'alert',
+    title: 'Price Drop Alert',
+    message: 'Priya Nair dropped 5% - Now at ₹150',
+    timestamp: '2026-02-21T16:20:00Z',
+    read: true,
+    athleteId: '2',
+    athleteName: 'Priya Nair',
+  },
+  {
+    id: 'notif-5',
+    type: 'system',
+    title: 'New Feature Available',
+    message: 'Compare up to 3 athletes side-by-side with our new comparison tool!',
+    timestamp: '2026-02-21T09:00:00Z',
+    read: true,
+  },
+  {
+    id: 'notif-6',
+    type: 'update',
+    title: 'Upcoming Match',
+    message: 'Arjun Sharma plays against Punjab Kings tomorrow at Mumbai',
+    timestamp: '2026-02-20T20:00:00Z',
+    read: true,
+    athleteId: '1',
+    athleteName: 'Arjun Sharma',
+  },
+  {
+    id: 'notif-7',
+    type: 'transaction',
+    title: 'Revenue Credited',
+    message: 'You earned ₹280 from Arjun Sharma\'s recent endorsements',
+    timestamp: '2026-02-20T12:00:00Z',
+    read: true,
+    athleteId: '1',
+    athleteName: 'Arjun Sharma',
+  },
+  {
+    id: 'notif-8',
+    type: 'alert',
+    title: 'Watchlist Update',
+    message: 'Kavya Patel in your watchlist gained 3.5% today',
+    timestamp: '2026-02-19T17:30:00Z',
+    read: true,
+    athleteId: '4',
+    athleteName: 'Kavya Patel',
+  },
+  {
+    id: 'notif-9',
+    type: 'system',
+    title: 'Maintenance Notice',
+    message: 'Platform will be under maintenance on Feb 25, 2AM - 4AM IST',
+    timestamp: '2026-02-19T10:00:00Z',
+    read: true,
+  },
+  {
+    id: 'notif-10',
+    type: 'update',
+    title: 'Season Milestone',
+    message: 'Rohan Verma reached 100 career wickets in T20!',
+    timestamp: '2026-02-18T15:45:00Z',
+    read: true,
+    athleteId: '3',
+    athleteName: 'Rohan Verma',
+  },
+];
+
+// Mock Price Alerts
+export const mockPriceAlerts: PriceAlert[] = [
+  {
+    id: 'alert-1',
+    athleteId: '1',
+    athleteName: 'Arjun Sharma',
+    athleteImage: 'https://images.unsplash.com/photo-1707549617870-e311a2274cd0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjBjcmlja2V0JTIwcGxheWVyJTIwbWFsZSUyMGF0aGxldGV8ZW58MXx8fHwxNzcxODQxMTYxfDA&ixlib=rb-4.1.0&q=80&w=1080',
+    condition: 'above',
+    targetPrice: 210,
+    currentPrice: 205,
+    isActive: true,
+    createdAt: '2026-02-20T10:00:00Z',
+  },
+  {
+    id: 'alert-2',
+    athleteId: '2',
+    athleteName: 'Priya Nair',
+    athleteImage: 'https://images.unsplash.com/photo-1546525848-3ce03ca516f6?w=400&h=400&fit=crop',
+    condition: 'below',
+    targetPrice: 140,
+    currentPrice: 150,
+    isActive: true,
+    createdAt: '2026-02-19T14:30:00Z',
+  },
+  {
+    id: 'alert-3',
+    athleteId: '3',
+    athleteName: 'Rohan Verma',
+    athleteImage: 'https://images.unsplash.com/photo-1720799359504-102495aec122?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjB5b3VuZyUyMG1hbGUlMjBhdGhsZXRlJTIwc3BvcnRzfGVufDF8fHx8MTc3MTg0MTE2MXww&ixlib=rb-4.1.0&q=80&w=1080',
+    condition: 'change',
+    changePercent: 5,
+    currentPrice: 250,
+    isActive: true,
+    createdAt: '2026-02-18T09:00:00Z',
+  },
+  {
+    id: 'alert-4',
+    athleteId: '4',
+    athleteName: 'Kavya Patel',
+    athleteImage: 'https://images.unsplash.com/photo-1594736797933-d0501ba2fe65?w=400&h=400&fit=crop',
+    condition: 'above',
+    targetPrice: 185,
+    currentPrice: 180,
+    isActive: false,
+    createdAt: '2026-02-15T11:20:00Z',
+    triggeredAt: '2026-02-16T14:30:00Z',
+  },
+];
