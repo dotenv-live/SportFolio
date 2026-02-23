@@ -1,53 +1,98 @@
+import { useState } from 'react';
 import { Link } from 'react-router';
-import { mockInvestments, mockUser, calculatePortfolioValue, calculateTotalROI, mockAthletes, mockNotifications } from '../data/mockData';
-import { TrendingUp, ChevronRight, Search, Bell } from 'lucide-react';
+import { mockNotifications, mockInvestments, mockUser, calculatePortfolioValue, calculateTotalROI, mockAthletes, mockPriceAlerts } from '../data/mockData';
+import { Bell, Search, TrendingUp, ChevronRight } from 'lucide-react';
 import { Sparkline } from '../components/Sparkline';
+import { Input } from '../components/ui/input';
+import AthleteMarketplace from './AthleteMarketplace';
+import Watchlist from './Watchlist';
+import Alerts from './Alerts';
 import { BottomNavigation } from '../components/BottomNavigation';
 
-interface InvestorDashboardProps {
-  hideHeader?: boolean;
+type Tab = 'dashboard' | 'explore' | 'watchlist' | 'alerts';
+
+export default function Home() {
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const unreadNotifications = mockNotifications.filter(n => !n.read).length;
+
+  const tabs = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'explore', label: 'Explore' },
+    { id: 'watchlist', label: 'Watchlist' },
+    { id: 'alerts', label: 'Alerts' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-black text-white">
+      {/* Header with Tab Navigation */}
+      <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-sm border-b border-white/[0.08]">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <span className="font-semibold text-base">Sports Folio</span>
+          <div className="flex items-center gap-2">
+            <button className="w-8 h-8 flex items-center justify-center">
+              <Search className="w-5 h-5" />
+            </button>
+            <Link to="/notifications">
+              <button className="w-8 h-8 flex items-center justify-center relative">
+                <Bell className="w-5 h-5" />
+                {unreadNotifications > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                    {unreadNotifications}
+                  </span>
+                )}
+              </button>
+            </Link>
+            <Link to="/investor">
+              <button className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-black font-semibold text-sm">
+                R
+              </button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex gap-0 overflow-x-auto scrollbar-hide px-4">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as Tab)}
+              className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors relative ${
+                activeTab === tab.id
+                  ? 'text-white'
+                  : 'text-neutral-500'
+              }`}
+            >
+              {tab.label}
+              {activeTab === tab.id && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500" />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div className="pb-20">
+        {activeTab === 'dashboard' && <DashboardContent />}
+        {activeTab === 'explore' && <ExploreContent />}
+        {activeTab === 'watchlist' && <WatchlistContent />}
+        {activeTab === 'alerts' && <AlertsContent />}
+      </div>
+
+      <BottomNavigation currentPage="home" />
+    </div>
+  );
 }
 
-export default function InvestorDashboard({ hideHeader = false }: InvestorDashboardProps) {
+// Dashboard Content (without header - already in Home)
+function DashboardContent() {
   const portfolioValue = calculatePortfolioValue(mockInvestments);
   const totalInvested = mockInvestments.reduce((sum, inv) => sum + inv.investedAmount, 0);
   const totalROI = calculateTotalROI(mockInvestments);
   const totalGain = portfolioValue - totalInvested;
-  const unreadNotifications = mockNotifications.filter(n => !n.read).length;
 
   return (
-    <div className="min-h-screen bg-black text-white pb-24">
-      {/* Header */}
-      {!hideHeader && (
-        <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-sm border-b border-white/[0.08] px-4 py-3">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-base">Sports Folio</span>
-            <div className="flex items-center gap-2">
-              <Link to="/notifications">
-                <button className="w-8 h-8 flex items-center justify-center relative">
-                  <Bell className="w-5 h-5" />
-                  {unreadNotifications > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                      {unreadNotifications}
-                    </span>
-                  )}
-                </button>
-              </Link>
-              <Link to="/marketplace">
-                <button className="w-8 h-8 flex items-center justify-center">
-                  <Search className="w-5 h-5" />
-                </button>
-              </Link>
-              <Link to="/investor">
-                <button className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-black font-semibold text-sm">
-                  {mockUser.name.charAt(0)}
-                </button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
-
+    <div>
       {/* Portfolio Value */}
       <div className="px-4 py-6 border-b border-white/[0.08]">
         <div className="text-sm text-neutral-500 mb-2">Portfolio Value</div>
@@ -191,9 +236,33 @@ export default function InvestorDashboard({ hideHeader = false }: InvestorDashbo
             })}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Bottom Navigation */}
-      <BottomNavigation />
+// Explore Content (without header)
+function ExploreContent() {
+  return (
+    <div>
+      <AthleteMarketplace hideHeader />
+    </div>
+  );
+}
+
+// Watchlist Content (without header)
+function WatchlistContent() {
+  return (
+    <div>
+      <Watchlist hideHeader />
+    </div>
+  );
+}
+
+// Alerts Content (without header)
+function AlertsContent() {
+  return (
+    <div>
+      <Alerts hideHeader />
     </div>
   );
 }

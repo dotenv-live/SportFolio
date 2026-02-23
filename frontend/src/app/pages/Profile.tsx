@@ -1,27 +1,87 @@
-import { Link } from 'react-router';
-import { ArrowLeft, Bell, Settings, Search } from 'lucide-react';
-import { mockUser } from '../data/mockData';
+import { Link, useNavigate } from 'react-router';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Search, ArrowUpFromLine, ArrowDownToLine, FileText, BarChart3, LogOut, User, Edit, X, Check, Smartphone, CreditCard, Building2, Wallet, Eye, Bell } from 'lucide-react';
+import { mockUser, mockNotifications } from '../data/mockData';
+import { Button } from '../components/ui/button';
+import { toast } from 'sonner';
+import { BottomNavigation } from '../components/BottomNavigation';
 
 export default function Profile() {
+  const navigate = useNavigate();
+  const [showAddFunds, setShowAddFunds] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [selectedAmount, setSelectedAmount] = useState(0);
+  const [customAmount, setCustomAmount] = useState('');
+  const [selectedPayment, setSelectedPayment] = useState('upi');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [transactionType, setTransactionType] = useState<'add' | 'withdraw'>('add');
+
   const joiningDate = new Date(mockUser.joinedAt);
   const monthYear = joiningDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
-  const balance = 7340; // Mock balance
+
+  const presetAmounts = [1000, 5000, 10000, 25000, 50000, 100000];
+
+  const handleAddFunds = () => {
+    setTransactionType('add');
+    setShowAddFunds(true);
+    setSelectedAmount(0);
+    setCustomAmount('');
+  };
+
+  const handleWithdraw = () => {
+    setTransactionType('withdraw');
+    setShowWithdraw(true);
+    setSelectedAmount(0);
+    setCustomAmount('');
+  };
+
+  const handleTransaction = () => {
+    const amount = selectedAmount || Number(customAmount);
+    if (amount <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+
+    if (transactionType === 'withdraw' && amount > mockUser.walletBalance) {
+      toast.error('Insufficient balance');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    setTimeout(() => {
+      setIsProcessing(false);
+      setShowSuccess(true);
+
+      setTimeout(() => {
+        setShowSuccess(false);
+        setShowAddFunds(false);
+        setShowWithdraw(false);
+      }, 2000);
+    }, 1500);
+  };
+
+  const getFinalAmount = () => selectedAmount || Number(customAmount) || 0;
+
+  const handleLogout = () => {
+    toast.success('Logged out successfully');
+    setTimeout(() => {
+      navigate('/');
+    }, 1000);
+  };
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white pb-24">
       {/* Header */}
       <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-sm border-b border-white/[0.08] px-4 py-3">
         <div className="flex items-center justify-between">
-          <span className="font-semibold text-base">Sports Folio</span>
+          <span className="font-semibold text-base">Profile</span>
           <div className="flex items-center gap-2">
             <Link to="/marketplace">
               <button className="w-8 h-8 flex items-center justify-center">
                 <Search className="w-5 h-5" />
-              </button>
-            </Link>
-            <Link to="/investor">
-              <button className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-black font-semibold text-sm">
-                {mockUser.name.charAt(0)}
               </button>
             </Link>
           </div>
@@ -56,135 +116,388 @@ export default function Profile() {
 
           {/* Name */}
           <h1 className="text-2xl font-bold mb-1">{mockUser.name}</h1>
+          <p className="text-sm text-neutral-500">{mockUser.email}</p>
         </div>
       </div>
 
-      {/* Balance Section */}
+      {/* Wallet Balance */}
       <div className="px-4 py-4 border-b border-white/[0.08]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#1a1a1a] border border-white/[0.08] rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
-              </svg>
+        <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-emerald-500" />
+              <span className="text-sm text-neutral-400">Wallet Balance</span>
             </div>
-            <div>
-              <div className="text-lg font-bold">₹{balance.toLocaleString()}</div>
-              <div className="text-xs text-neutral-500">Athletes, Investment balance</div>
-            </div>
+            <Eye className="w-4 h-4 text-neutral-500" />
           </div>
-          <button className="px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-lg text-sm font-medium border border-emerald-500/20 flex items-center gap-1.5">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            Add money
-          </button>
+          <div className="text-3xl font-bold mb-4">₹{mockUser.walletBalance.toLocaleString()}</div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleAddFunds}
+              className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
+            >
+              <ArrowDownToLine className="w-4 h-4" />
+              Add Funds
+            </button>
+            <button
+              onClick={handleWithdraw}
+              className="flex-1 bg-white/5 hover:bg-white/10 text-white font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
+            >
+              <ArrowUpFromLine className="w-4 h-4" />
+              Withdraw
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Menu Items */}
       <div className="px-4 py-2">
+        <Link to="/portfolio?tab=orders">
+          <MenuItem 
+            icon={<FileText className="w-5 h-5" />}
+            label="Orders"
+          />
+        </Link>
+        <Link to="/alerts">
+          <MenuItem 
+            icon={<Bell className="w-5 h-5" />}
+            label="Price Alerts"
+          />
+        </Link>
         <MenuItem 
-          icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          }
-          label="Orders"
+          icon={<User className="w-5 h-5" />}
+          label="Edit Profile"
         />
-        <MenuItem 
-          icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          }
-          label="Account details"
-        />
-        <MenuItem 
-          icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
-            </svg>
-          }
-          label="Bank & AutoPay"
-        />
-        <MenuItem 
-          icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-          }
-          label="Customer support 24x7"
-        />
-        <MenuItem 
-          icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          }
-          label="Reports"
-        />
-        <MenuItem 
-          icon={
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-          }
-          label="Refer & Invite"
-        />
+        <Link to="/analytics">
+          <MenuItem 
+            icon={<BarChart3 className="w-5 h-5" />}
+            label="Analytics"
+          />
+        </Link>
+        <button onClick={handleLogout} className="w-full">
+          <MenuItem 
+            icon={<LogOut className="w-5 h-5" />}
+            label="Logout"
+            danger
+          />
+        </button>
       </div>
 
+      {/* Add Funds Bottom Sheet */}
+      <AnimatePresence>
+        {showAddFunds && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowAddFunds(false)}
+              className="fixed inset-0 bg-black/60 z-50"
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-white/[0.08] rounded-t-3xl z-50 max-h-[85vh] overflow-y-auto"
+            >
+              {!showSuccess ? (
+                <div className="p-6">
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-lg font-bold">Add Funds</h2>
+                    <button
+                      onClick={() => setShowAddFunds(false)}
+                      className="w-8 h-8 flex items-center justify-center hover:bg-white/5 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Amount Selection */}
+                  <div className="mb-6">
+                    <div className="text-sm text-neutral-400 mb-3">Select Amount</div>
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                      {presetAmounts.map((amount) => (
+                        <button
+                          key={amount}
+                          onClick={() => {
+                            setSelectedAmount(amount);
+                            setCustomAmount('');
+                          }}
+                          className={`py-3 rounded-xl font-medium transition-colors ${
+                            selectedAmount === amount
+                              ? 'bg-emerald-500 text-black'
+                              : 'bg-white/5 text-white hover:bg-white/10'
+                          }`}
+                        >
+                          ₹{(amount / 1000).toFixed(0)}k
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="number"
+                      placeholder="Enter custom amount"
+                      value={customAmount}
+                      onChange={(e) => {
+                        setCustomAmount(e.target.value);
+                        setSelectedAmount(0);
+                      }}
+                      className="w-full bg-white/5 border border-white/[0.08] rounded-xl px-4 py-3 text-white placeholder:text-neutral-500 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  {/* Payment Method */}
+                  <div className="mb-6">
+                    <div className="text-sm text-neutral-400 mb-3">Payment Method</div>
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => setSelectedPayment('upi')}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${
+                          selectedPayment === 'upi'
+                            ? 'bg-emerald-500/10 border-2 border-emerald-500'
+                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                        }`}
+                      >
+                        <Smartphone className="w-5 h-5" />
+                        <span className="font-medium">UPI</span>
+                      </button>
+                      <button
+                        onClick={() => setSelectedPayment('card')}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${
+                          selectedPayment === 'card'
+                            ? 'bg-emerald-500/10 border-2 border-emerald-500'
+                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                        }`}
+                      >
+                        <CreditCard className="w-5 h-5" />
+                        <span className="font-medium">Debit/Credit Card</span>
+                      </button>
+                      <button
+                        onClick={() => setSelectedPayment('netbanking')}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${
+                          selectedPayment === 'netbanking'
+                            ? 'bg-emerald-500/10 border-2 border-emerald-500'
+                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                        }`}
+                      >
+                        <Building2 className="w-5 h-5" />
+                        <span className="font-medium">Net Banking</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary */}
+                  {getFinalAmount() > 0 && (
+                    <div className="bg-white/5 rounded-xl p-4 mb-6">
+                      <div className="flex items-center justify-between text-sm mb-2">
+                        <span className="text-neutral-400">Amount</span>
+                        <span className="font-medium">₹{getFinalAmount().toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm mb-2">
+                        <span className="text-neutral-400">Gateway Fee</span>
+                        <span className="font-medium">₹0</span>
+                      </div>
+                      <div className="border-t border-white/[0.08] my-3" />
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">Total Payable</span>
+                        <span className="font-bold text-lg">₹{getFinalAmount().toLocaleString()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Add Button */}
+                  <Button
+                    onClick={handleTransaction}
+                    disabled={isProcessing || getFinalAmount() === 0}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-6 rounded-xl"
+                  >
+                    {isProcessing ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                        Processing...
+                      </div>
+                    ) : (
+                      `Add ₹${getFinalAmount().toLocaleString()}`
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="p-6 text-center">
+                  <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Check className="w-8 h-8 text-emerald-500" />
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Funds Added Successfully!</h3>
+                  <p className="text-neutral-400 mb-4">
+                    ₹{getFinalAmount().toLocaleString()} has been credited to your wallet
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Withdraw Funds Bottom Sheet */}
+      <AnimatePresence>
+        {showWithdraw && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowWithdraw(false)}
+              className="fixed inset-0 bg-black/60 z-50"
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a] border-t border-white/[0.08] rounded-t-3xl z-50 max-h-[85vh] overflow-y-auto"
+            >
+              {!showSuccess ? (
+                <div className="p-6">
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-lg font-bold">Withdraw Funds</h2>
+                    <button
+                      onClick={() => setShowWithdraw(false)}
+                      className="w-8 h-8 flex items-center justify-center hover:bg-white/5 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Available Balance */}
+                  <div className="bg-white/5 rounded-xl p-4 mb-6">
+                    <div className="text-sm text-neutral-400 mb-1">Available Balance</div>
+                    <div className="text-2xl font-bold">₹{mockUser.walletBalance.toLocaleString()}</div>
+                  </div>
+
+                  {/* Amount Selection */}
+                  <div className="mb-6">
+                    <div className="text-sm text-neutral-400 mb-3">Withdraw Amount</div>
+                    <input
+                      type="number"
+                      placeholder="Enter amount"
+                      value={customAmount}
+                      onChange={(e) => {
+                        setCustomAmount(e.target.value);
+                        setSelectedAmount(0);
+                      }}
+                      max={mockUser.walletBalance}
+                      className="w-full bg-white/5 border border-white/[0.08] rounded-xl px-4 py-3 text-white placeholder:text-neutral-500 focus:outline-none focus:border-emerald-500 mb-2"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setCustomAmount((mockUser.walletBalance * 0.25).toString());
+                          setSelectedAmount(0);
+                        }}
+                        className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        25%
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCustomAmount((mockUser.walletBalance * 0.5).toString());
+                          setSelectedAmount(0);
+                        }}
+                        className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        50%
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCustomAmount((mockUser.walletBalance * 0.75).toString());
+                          setSelectedAmount(0);
+                        }}
+                        className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        75%
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCustomAmount(mockUser.walletBalance.toString());
+                          setSelectedAmount(0);
+                        }}
+                        className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        MAX
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Bank Account */}
+                  <div className="mb-6">
+                    <div className="text-sm text-neutral-400 mb-3">Bank Account</div>
+                    <div className="bg-white/5 border border-white/[0.08] rounded-xl p-4">
+                      <div className="flex items-center gap-3">
+                        <Building2 className="w-5 h-5 text-neutral-400" />
+                        <div className="flex-1">
+                          <div className="font-medium text-sm">HDFC Bank</div>
+                          <div className="text-xs text-neutral-500">****1234</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Notice */}
+                  <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 mb-6">
+                    <div className="text-xs text-yellow-500">
+                      ⓘ Withdrawals are processed within 1-2 business days
+                    </div>
+                  </div>
+
+                  {/* Withdraw Button */}
+                  <Button
+                    onClick={handleTransaction}
+                    disabled={isProcessing || getFinalAmount() === 0 || getFinalAmount() > mockUser.walletBalance}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-6 rounded-xl"
+                  >
+                    {isProcessing ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                        Processing...
+                      </div>
+                    ) : (
+                      `Withdraw ₹${getFinalAmount().toLocaleString()}`
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="p-6 text-center">
+                  <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Check className="w-8 h-8 text-emerald-500" />
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Withdrawal Initiated!</h3>
+                  <p className="text-neutral-400 mb-4">
+                    ₹{getFinalAmount().toLocaleString()} will be credited to your bank account in 1-2 business days
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-white/[0.08] px-4 py-3 safe-area-bottom">
-        <div className="flex items-center justify-around">
-          <Link to="/dashboard" className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-            </div>
-            <span className="text-[10px] text-neutral-500">Home</span>
-          </Link>
-          <Link to="/marketplace" className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-            <span className="text-[10px] text-neutral-500">Explore</span>
-          </Link>
-          <Link to="/portfolio" className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <span className="text-[10px] text-neutral-500">Holdings</span>
-          </Link>
-          <Link to="/investor" className="flex flex-col items-center gap-1">
-            <div className="w-10 h-10 flex items-center justify-center">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-            <span className="text-[10px] text-white font-medium">Profile</span>
-          </Link>
-        </div>
-      </div>
+      <BottomNavigation />
     </div>
   );
 }
 
-function MenuItem({ icon, label }: { icon: React.ReactNode; label: string }) {
+function MenuItem({ icon, label, danger = false }: { icon: React.ReactNode; label: string; danger?: boolean }) {
   return (
-    <button className="w-full flex items-center gap-4 py-4 border-b border-white/[0.05] active:bg-[#1a1a1a]/50 transition-colors">
-      <div className="text-neutral-400">
+    <div className={`w-full flex items-center gap-4 py-4 border-b border-white/[0.05] active:bg-[#1a1a1a]/50 transition-colors ${danger ? 'text-red-500' : ''}`}>
+      <div className={danger ? 'text-red-500' : 'text-neutral-400'}>
         {icon}
       </div>
       <span className="text-base flex-1 text-left">{label}</span>
       <svg className="w-4 h-4 text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
       </svg>
-    </button>
+    </div>
   );
 }
