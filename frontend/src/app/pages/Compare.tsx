@@ -1,19 +1,20 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { mockAthletes } from '../data/mockData';
+import { usePlayers } from '../hooks/useApi';
 import { ArrowLeft, X, TrendingUp, TrendingDown, Plus } from 'lucide-react';
 import { Sparkline } from '../components/Sparkline';
 
 export default function Compare() {
   const [searchParams] = useSearchParams();
   const athleteIds = searchParams.get('ids')?.split(',') || [];
+  const { data: allAthletes = [] } = usePlayers();
   
   const [selectedAthletes, setSelectedAthletes] = useState<string[]>(athleteIds);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const athletes = selectedAthletes
-    .map(id => mockAthletes.find(a => a.id === id))
-    .filter(Boolean) as typeof mockAthletes;
+    .map(id => allAthletes.find(a => a.id === id))
+    .filter(Boolean) as typeof allAthletes;
 
   const handleAddAthlete = (athleteId: string) => {
     if (selectedAthletes.length < 3 && !selectedAthletes.includes(athleteId)) {
@@ -283,7 +284,7 @@ export default function Compare() {
             </div>
 
             <div className="px-4 py-4 space-y-2">
-              {mockAthletes
+              {allAthletes
                 .filter(athlete => !selectedAthletes.includes(athlete.id))
                 .map(athlete => (
                   <button

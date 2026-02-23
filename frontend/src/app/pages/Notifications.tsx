@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { mockNotifications } from '../data/mockData';
+import { useNotifications } from '../hooks/useApi';
 import { ArrowLeft, Bell, TrendingUp, DollarSign, Info, Settings as SettingsIcon, Check, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { BottomNavigation } from '../components/BottomNavigation';
@@ -9,7 +9,8 @@ type NotificationFilter = 'all' | 'transaction' | 'alert' | 'update' | 'system';
 
 export default function Notifications() {
   const [filter, setFilter] = useState<NotificationFilter>('all');
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const { data: initialNotifications = [] } = useNotifications();
+  const [notifications, setNotifications] = useState(initialNotifications);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 

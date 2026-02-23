@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Input } from '../components/ui/input';
-import { mockAthletes, mockNotifications } from '../data/mockData';
+import { usePlayers, useNotifications } from '../hooks/useApi';
+import { MarketplaceSkeleton } from '../components/skeletons';
 import { Search, TrendingUp, TrendingDown, Bell } from 'lucide-react';
 import { BottomNavigation } from '../components/BottomNavigation';
 
@@ -11,32 +12,34 @@ interface AthleteMarketplaceProps {
 
 export default function AthleteMarketplace({ hideHeader = false }: AthleteMarketplaceProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const unreadNotifications = mockNotifications.filter(n => !n.read).length;
+  const { data: notifications = [] } = useNotifications();
+  const unreadNotifications = notifications.filter(n => !n.read).length;
+  const { data: allAthletes = [], isLoading } = usePlayers();
 
-  const filteredAthletes = mockAthletes.filter((athlete) =>
+  const filteredAthletes = allAthletes.filter((athlete) =>
     athlete.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     athlete.sport.toLowerCase().includes(searchTerm.toLowerCase()) ||
     athlete.role.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Curated sections
-  const topGainers = [...mockAthletes]
+  const topGainers = [...allAthletes]
     .sort((a, b) => b.priceChange24h - a.priceChange24h)
     .slice(0, 6);
 
-  const topLosers = [...mockAthletes]
+  const topLosers = [...allAthletes]
     .sort((a, b) => a.priceChange24h - b.priceChange24h)
     .slice(0, 6);
 
-  const topPerformers = [...mockAthletes]
+  const topPerformers = [...allAthletes]
     .sort((a, b) => b.performanceScore - a.performanceScore)
     .slice(0, 6);
 
-  const highGrowthPotential = mockAthletes
+  const highGrowthPotential = allAthletes
     .filter(a => a.riskTier === 'High')
     .slice(0, 6);
 
-  const stableInvestments = mockAthletes
+  const stableInvestments = allAthletes
     .filter(a => a.riskTier === 'Low')
     .slice(0, 6);
 
@@ -81,7 +84,9 @@ export default function AthleteMarketplace({ hideHeader = false }: AthleteMarket
         </div>
       )}
 
-      {searchTerm ? (
+      {isLoading ? (
+        <MarketplaceSkeleton />
+      ) : searchTerm ? (
         /* Search Results */
         <div className="px-4 py-4">
           <h2 className="text-sm font-semibold mb-3 text-neutral-400">

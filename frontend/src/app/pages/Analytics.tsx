@@ -1,17 +1,24 @@
 import { Link } from 'react-router';
 import { useState } from 'react';
-import { mockInvestments, mockAthletes, mockUser, mockOrders, calculatePortfolioValue, calculateTotalROI } from '../data/mockData';
+import { calculatePortfolioValue, calculateTotalROI } from '../data/types';
+import { AnalyticsSkeleton } from '../components/skeletons';
+import { useHoldings, useTransactions, usePlayers } from '../hooks/useApi';
 import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function Analytics() {
   const [timeRange, setTimeRange] = useState('20M');
+  const { data: investments = [], isLoading: loadingInv } = useHoldings();
+  const { data: athletes = [], isLoading: loadingAth } = usePlayers();
+  const { data: orders = [] } = useTransactions(athletes);
+
+  const isLoading = loadingInv || loadingAth;
   
-  const portfolioValue = calculatePortfolioValue(mockInvestments);
-  const totalInvested = mockInvestments.reduce((sum, inv) => sum + inv.investedAmount, 0);
-  const totalROI = calculateTotalROI(mockInvestments);
+  const portfolioValue = calculatePortfolioValue(investments);
+  const totalInvested = investments.reduce((sum, inv) => sum + inv.investedAmount, 0);
+  const totalROI = calculateTotalROI(investments);
   const totalGain = portfolioValue - totalInvested;
-  const totalRevenue = mockInvestments.reduce((sum, inv) => sum + inv.revenueEarned, 0);
+  const totalRevenue = investments.reduce((sum, inv) => sum + inv.revenueEarned, 0);
 
   // Portfolio growth data (match-based)
   const portfolioGrowthData = [
@@ -28,7 +35,7 @@ export default function Analytics() {
   ];
 
   // Holdings performance
-  const holdingsPerformance = mockInvestments.map((inv) => ({
+  const holdingsPerformance = investments.map((inv) => ({
     name: inv.athleteName.split(' ')[0],
     roi: inv.roi,
     value: inv.currentValue,
@@ -86,6 +93,8 @@ export default function Analytics() {
         </div>
       </div>
 
+      {isLoading ? <AnalyticsSkeleton /> : (
+      <>
       {/* Portfolio Overview */}
       <div className="px-4 py-6">
         <div className="mb-2 text-xs text-neutral-500 uppercase tracking-wider">Portfolio Value</div>
@@ -115,7 +124,7 @@ export default function Analytics() {
           </div>
           <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
             <div className="text-xs text-neutral-500 mb-1">Holdings</div>
-            <div className="text-base font-bold">{mockInvestments.length}</div>
+            <div className="text-base font-bold">{investments.length}</div>
           </div>
         </div>
       </div>
@@ -285,7 +294,7 @@ export default function Analytics() {
           {/* Total Orders */}
           <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-4">
             <div className="text-xs text-neutral-500 mb-2">Total Orders</div>
-            <div className="text-2xl font-bold">{mockOrders.length}</div>
+            <div className="text-2xl font-bold">{orders.length}</div>
           </div>
         </div>
       </div>
@@ -302,7 +311,7 @@ export default function Analytics() {
               <div className="text-xs text-neutral-500">Last 30 days</div>
             </div>
             <div className="text-2xl font-bold text-emerald-500">
-              {mockOrders.filter(o => o.type === 'BUY').length}
+              {orders.filter(o => o.type === 'BUY').length}
             </div>
           </div>
           <div className="p-4 flex items-center justify-between">
@@ -311,7 +320,7 @@ export default function Analytics() {
               <div className="text-xs text-neutral-500">Last 30 days</div>
             </div>
             <div className="text-2xl font-bold text-red-500">
-              {mockOrders.filter(o => o.type === 'SELL').length}
+              {orders.filter(o => o.type === 'SELL').length}
             </div>
           </div>
           <div className="p-4 flex items-center justify-between">
@@ -320,11 +329,13 @@ export default function Analytics() {
               <div className="text-xs text-neutral-500">Completed orders</div>
             </div>
             <div className="text-2xl font-bold">
-              {((mockOrders.filter(o => o.status === 'Completed').length / mockOrders.length) * 100).toFixed(0)}%
+              {((orders.filter(o => o.status === 'Completed').length / orders.length) * 100).toFixed(0)}%
             </div>
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-white/[0.08] px-4 py-3 safe-area-bottom">

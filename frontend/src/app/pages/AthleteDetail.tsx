@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '../components/ui/button';
-import { mockAthletes, mockUser, mockInvestments } from '../data/mockData';
+import { usePlayer, useHoldings } from '../hooks/useApi';
+import { usePlayerPriceSocket } from '../hooks/useWebSocket';
+import { useAuth } from '../context/AuthContext';
+import { tradingApi } from '../services/api';
+import { AthleteDetailSkeleton } from '../components/skeletons';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Plus, ChevronDown, ChevronUp, Calendar, Info, X, Check, Star, Share2, Users, BookOpen, BarChart3, AlertCircle, Bell } from 'lucide-react';
 import { ResponsiveContainer, Area, AreaChart, Tooltip, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { toast } from 'sonner';
@@ -29,8 +33,11 @@ const CustomTooltip = ({ active, payload }: any) => {
 export default function AthleteDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const athlete = mockAthletes.find((a) => a.id === id);
-  const userInvestment = mockInvestments.find((inv) => inv.athleteId === id);
+  const { data: apiAthlete, isLoading } = usePlayer(id);
+  usePlayerPriceSocket(id);
+  const { data: investments = [] } = useHoldings();
+  const athlete = apiAthlete ?? null;
+  const userInvestment = investments.find((inv: any) => inv.athleteId === id);
   const hasShares = !!userInvestment;
 
   const [units, setUnits] = useState(10);
@@ -47,6 +54,8 @@ export default function AthleteDetail() {
   const [fundamentalsExpanded, setFundamentalsExpanded] = useState(true);
   const [contractExpanded, setContractExpanded] = useState(true);
 
+  if (isLoading) return <AthleteDetailSkeleton />;
+
   if (!athlete) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -60,15 +69,19 @@ export default function AthleteDetail() {
     );
   }
 
-  const lastMatchChange = athlete.priceChange24h;
-  const isGain = lastMatchChange >= 0;
+  // Compute price change from the last two price history entries (reflects last trade)
+  const ph = athlete.priceHistory ?? [];
+  const priceChange = ph.length >= 2
+    ? Math.round(((ph[ph.length - 1] - ph[ph.length - 2]) / ph[ph.length - 2]) * 10000) / 100
+    : (athlete.priceChange24h ?? 0);
+  const isGain = priceChange >= 0;
   const totalCost = units * athlete.pricePerUnit;
   const platformFee = totalCost * 0.01; // 1% platform fee
   const totalPayable = totalCost + platformFee;
 
   // Calculate season high/low
-  const seasonHigh = Math.max(...(athlete.priceHistory || []));
-  const seasonLow = Math.min(...(athlete.priceHistory || []));
+  const seasonHigh = ph.length ? Math.max(...ph) : athlete.pricePerUnit;
+  const seasonLow = ph.length ? Math.min(...ph) : athlete.pricePerUnit;
   const lastMatch = athlete.recentMatches[0];
   const nextMatch = athlete.upcomingMatches?.[0];
 
@@ -85,6 +98,16 @@ export default function AthleteDetail() {
 
   const filteredChartData = getFilteredChartData();
 
+  // Widen Y-axis range so price movements are visually prominent
+  const chartPrices = filteredChartData.map((d: any) => d.price);
+  const chartMin = chartPrices.length ? Math.min(...chartPrices) : 0;
+  const chartMax = chartPrices.length ? Math.max(...chartPrices) : 0;
+  const chartPad = Math.max((chartMax - chartMin) * 0.35, chartMax * 0.02);
+  const yDomain: [number, number] = [
+    Math.max(0, chartMin - chartPad),
+    chartMax + chartPad,
+  ];
+
   const handleBuyClick = () => {
     setTransactionType('buy');
     setShowBuySheet(true);
@@ -97,20 +120,20 @@ export default function AthleteDetail() {
     setUnits(Math.min(10, userInvestment?.units || 10));
   };
 
-  const handleTransaction = () => {
+  const handleTransaction = async () => {
     setIsProcessing(true);
-    
-    setTimeout(() => {
+    try {
+      if (transactionType === 'buy') {
+        await tradingApi.buy(athlete!.id, units);
+      } else {
+        await tradingApi.sell(athlete!.id, units);
+      }
       setIsProcessing(false);
       setShowSuccess(true);
-
-      setTimeout(() => {
-        setShowSuccess(false);
-        setShowBuySheet(false);
-        setShowSellSheet(false);
-        navigate('/portfolio');
-      }, 2000);
-    }, 1500);
+    } catch (err: any) {
+      setIsProcessing(false);
+      toast.error(err.message || 'Transaction failed');
+    }
   };
 
   const handleToggleWatchlist = () => {
@@ -176,9 +199,9 @@ export default function AthleteDetail() {
           <div className="flex items-center gap-2">
             <div className={`flex items-center gap-1 text-sm font-medium ${isGain ? 'text-emerald-500' : 'text-red-500'}`}>
               {isGain ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              {isGain ? '+' : ''}₹{Math.abs(athlete.pricePerUnit * lastMatchChange / 100).toFixed(2)} ({isGain ? '+' : ''}{lastMatchChange}%)
+              {isGain ? '+' : ''}₹{Math.abs(athlete.pricePerUnit * priceChange / 100).toFixed(2)} ({isGain ? '+' : ''}{priceChange.toFixed(2)}%)
             </div>
-            <div className="text-xs text-neutral-500">Last match</div>
+            <div className="text-xs text-neutral-500">Price change</div>
           </div>
         </div>
       </div>
@@ -194,6 +217,7 @@ export default function AthleteDetail() {
                   <stop offset="100%" stopColor={isGain ? '#10b981' : '#ef4444'} stopOpacity={0} />
                 </linearGradient>
               </defs>
+              <YAxis domain={yDomain} hide />
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ffffff', strokeWidth: 1, strokeDasharray: '3 3' }} />
               <Area
                 type="monotone"
@@ -628,16 +652,23 @@ export default function AthleteDetail() {
                       >
                         <Minus className="w-4 h-4" />
                       </button>
-                      <div className="flex-1 text-center">
-                        <div className="text-2xl font-bold">₹{totalCost.toLocaleString()}</div>
-                        <div className="text-xs text-neutral-500">Total cost</div>
-                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        value={units}
+                        onChange={(e) => setUnits(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-20 h-10 text-center bg-[#1a1a1a] border border-white/[0.08] rounded-lg text-white font-medium focus:outline-none focus:border-emerald-500/50"
+                      />
                       <button
                         onClick={() => setUnits(units + 1)}
                         className="w-10 h-10 flex items-center justify-center border border-white/[0.08] rounded-lg active:bg-[#1a1a1a]"
                       >
                         <Plus className="w-4 h-4" />
                       </button>
+                    </div>
+                    <div className="flex-1 text-center mt-3">
+                      <div className="text-2xl font-bold">₹{totalCost.toLocaleString()}</div>
+                      <div className="text-xs text-neutral-500">Total cost</div>
                     </div>
                   </div>
 
@@ -677,10 +708,10 @@ export default function AthleteDetail() {
                     You bought {units} units of {athlete.name}
                   </p>
                   <Button
-                    onClick={() => navigate('/portfolio')}
+                    onClick={() => { setShowSuccess(false); setShowBuySheet(false); }}
                     className="w-full bg-emerald-500 text-black font-semibold py-6 rounded-xl hover:bg-emerald-400"
                   >
-                    View Portfolio
+                    Done
                   </Button>
                 </div>
               )}
@@ -737,16 +768,24 @@ export default function AthleteDetail() {
                       >
                         <Minus className="w-4 h-4" />
                       </button>
-                      <div className="flex-1 text-center">
-                        <div className="text-2xl font-bold">₹{totalCost.toLocaleString()}</div>
-                        <div className="text-xs text-neutral-500">You'll receive</div>
-                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        max={userInvestment?.units || 10}
+                        value={units}
+                        onChange={(e) => setUnits(Math.min((userInvestment?.units || 10), Math.max(1, parseInt(e.target.value) || 1)))}
+                        className="w-20 h-10 text-center bg-[#1a1a1a] border border-white/[0.08] rounded-lg text-white font-medium focus:outline-none focus:border-red-500/50"
+                      />
                       <button
                         onClick={() => setUnits(Math.min((userInvestment?.units || 10), units + 1))}
                         className="w-10 h-10 flex items-center justify-center border border-white/[0.08] rounded-lg active:bg-[#1a1a1a]"
                       >
                         <Plus className="w-4 h-4" />
                       </button>
+                    </div>
+                    <div className="flex-1 text-center mt-3">
+                      <div className="text-2xl font-bold">₹{totalCost.toLocaleString()}</div>
+                      <div className="text-xs text-neutral-500">You'll receive</div>
                     </div>
                   </div>
 
@@ -786,10 +825,10 @@ export default function AthleteDetail() {
                     You sold {units} units of {athlete.name}
                   </p>
                   <Button
-                    onClick={() => navigate('/portfolio')}
+                    onClick={() => { setShowSuccess(false); setShowSellSheet(false); }}
                     className="w-full bg-red-500 text-white font-semibold py-6 rounded-xl hover:bg-red-600"
                   >
-                    View Portfolio
+                    Done
                   </Button>
                 </div>
               )}

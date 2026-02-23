@@ -3,11 +3,14 @@ import { useNavigate, useSearchParams, Link } from 'react-router';
 import { ArrowLeft, Mail, Lock, User, Phone, Trophy, TrendingUp } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
+import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 
 export default function AuthPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const userType = searchParams.get('type') || 'investor';
+  const { login, register } = useAuth();
   
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
@@ -16,13 +19,30 @@ export default function AuthPage() {
     phone: '',
     password: '',
   });
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (userType === 'investor') {
-      navigate('/home');
-    } else {
-      navigate('/athlete-dashboard');
+    setError('');
+    setSubmitting(true);
+    try {
+      if (isLogin) {
+        await login(formData.email, formData.password);
+      } else {
+        await register(formData.name, formData.email, formData.password);
+      }
+      if (userType === 'investor') {
+        navigate('/home');
+      } else {
+        navigate('/athlete-dashboard');
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err.message || 'Authentication failed';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -162,15 +182,20 @@ export default function AuthPage() {
               </div>
             )}
 
+            {error && (
+              <div className="text-red-500 text-xs text-center py-2">{error}</div>
+            )}
+
             <Button
               type="submit"
+              disabled={submitting}
               className={`w-full h-12 font-semibold ${
                 isInvestor
                   ? 'bg-emerald-500 hover:bg-emerald-600'
                   : 'bg-blue-500 hover:bg-blue-600'
               } text-white transition-colors`}
             >
-              {isLogin ? 'Sign In' : 'Create Account'}
+              {submitting ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
             </Button>
           </form>
 

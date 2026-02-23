@@ -3,12 +3,15 @@ import { Link } from 'react-router';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { mockAthletes } from '../data/mockData';
+import { AdminSkeleton } from '../components/skeletons';
+import { usePlayers } from '../hooks/useApi';
 import { Shield, Users, TrendingUp, AlertCircle, CheckCircle, XCircle, Search, Menu } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminPanel() {
   const [searchTerm, setSearchTerm] = useState('');
+  const { data: athletes = [], isLoading } = usePlayers();
+  const allAthletes = athletes;
 
   // Mock pending approvals
   const pendingAthletes = [
@@ -70,13 +73,14 @@ export default function AdminPanel() {
         </div>
       </div>
 
+      {isLoading ? <AdminSkeleton /> : (<>
       {/* Stats Grid */}
       <div className="px-4 py-4 border-b border-white/[0.08]">
         <h2 className="text-sm font-semibold mb-3">Overview</h2>
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-4">
             <div className="text-xs text-neutral-500 mb-1">Total Athletes</div>
-            <div className="text-2xl font-bold">{mockAthletes.length}</div>
+            <div className="text-2xl font-bold">{allAthletes.length}</div>
           </div>
           <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-4">
             <div className="text-xs text-neutral-500 mb-1">Pending</div>
@@ -200,7 +204,7 @@ export default function AdminPanel() {
             </div>
 
             <div className="space-y-2">
-              {mockAthletes
+              {allAthletes
                 .filter((a) => a.name.toLowerCase().includes(searchTerm.toLowerCase()))
                 .map((athlete) => (
                   <div
@@ -313,6 +317,7 @@ export default function AdminPanel() {
           </button>
         </Link>
       </div>
+      </>)}
     </div>
   );
 }
