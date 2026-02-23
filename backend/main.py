@@ -26,6 +26,8 @@ from app.api.routes.portfolio import router as portfolio_router
 from app.api.routes.income import router as income_router
 from app.api.routes.match_stats import router as match_stats_router
 from app.api.routes.admin import router as admin_router
+from app.api.routes.sports import router as sports_router
+from app.services.sport_config import sport_config_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("sportfolio")
@@ -38,6 +40,7 @@ async def lifespan(app: FastAPI):
     connect_to_mongo()
     assert mongodb.db is not None
     await create_indexes(mongodb.db)
+    await sport_config_service.ensure_defaults(mongodb.db)
     start_scheduler()
     yield
     stop_scheduler()
@@ -83,6 +86,7 @@ app.include_router(portfolio_router, prefix="/api/v1")
 app.include_router(income_router, prefix="/api/v1")
 app.include_router(match_stats_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+app.include_router(sports_router, prefix="/api/v1")
 
 
 @app.get("/health")

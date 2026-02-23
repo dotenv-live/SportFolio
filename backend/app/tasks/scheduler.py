@@ -17,7 +17,9 @@ from apscheduler.triggers.cron import CronTrigger
 from app.db.mongo import mongodb
 from app.services.dividend_engine import accrue_dividends_all
 from app.services.price_engine import recalculate_athlete_price
+from app.services.sport_config import sport_config_service
 from app.ai.predictor import ai_predictor
+from app.ai.model_resolver import ml_model_resolver
 
 logger = logging.getLogger("sportfolio.tasks")
 
@@ -38,31 +40,49 @@ async def daily_dividend_accrual() -> None:
 
 
 async def weekly_ai_retrain() -> None:
-    """Retrain AI models on all match stats."""
+    """Retrain AI models per sport (sport-isolated, no cross-sport contamination)."""
     db = mongodb.db
     if db is None:
         logger.warning("DB not connected – skipping AI retrain")
         return
     try:
-        all_stats = []
-        async for stat in db.match_stats.find():
-            all_stats.append(stat)
-        result = ai_predictor.retrain(all_stats)
-        logger.info("Weekly AI retrain: %s", result)
+        # Group athletes by sport
+        sports = await db.athletes.distinct("sport")
+        for sport_name in sports:
+            # Collect all match stats for athletes in this sport
+            athlete_ids = []
+            async for athlete in db.athletes.find({"sport": sport_name}):
+                athlete_ids.append(athlete["_id"])
 
-        # Update ai_score for every athlete
-        async for athlete in db.athletes.find():
-            stats = []
-            async for s in db.match_stats.find({"athlete_id": athlete["_id"]}):
-                stats.append(s)
-            if stats:
-                score = ai_predictor.compute_ai_score(stats)
-                await db.athletes.update_one(
-                    {"_id": athlete["_id"]},
-                    {"$set": {"ai_score": score}},
-                )
-                await recalculate_athlete_price(db, athlete["_id"])
-        logger.info("AI scores updated for all athletes")
+            sport_stats = []
+            for aid in athlete_ids:
+                async for s in db.match_stats.find({"athlete_id": aid}):
+                    sport_stats.append(s)
+
+            if not sport_stats:
+                continue
+
+            # Retrain models for this sport
+            result = ml_model_resolver.retrain(sport_name, sport_stats)
+            logger.info("AI retrain for sport=%s: %s", sport_name, result)
+
+            # Update ai_score per athlete using sport-specific weights
+            sport_config = await sport_config_service.get_by_name(db, sport_name)
+            ai_weights = sport_config.get("ai_weights") if sport_config else None
+
+            for aid in athlete_ids:
+                stats = []
+                async for s in db.match_stats.find({"athlete_id": aid}):
+                    stats.append(s)
+                if stats:
+                    score = ml_model_resolver.compute_ai_score(sport_name, ai_weights, stats)
+                    await db.athletes.update_one(
+                        {"_id": aid},
+                        {"$set": {"ai_score": score}},
+                    )
+                    await recalculate_athlete_price(db, aid)
+
+        logger.info("Sport-isolated AI retrain complete for %d sports", len(sports))
     except Exception:
         logger.exception("Error in weekly AI retrain")
 

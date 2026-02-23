@@ -11,8 +11,10 @@ from pydantic import BaseModel
 from app.api.deps import require_admin
 from app.db.mongo import get_db
 from app.ai.predictor import ai_predictor
+from app.ai.model_resolver import ml_model_resolver
 from app.services.dividend_engine import accrue_dividends_all, accrue_dividends_for_athlete
 from app.services.price_engine import recalculate_athlete_price
+from app.services.sport_config import sport_config_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -83,12 +85,20 @@ async def retrain_ai(
     db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
     _admin: Annotated[dict, Depends(require_admin)],
 ):
-    """Trigger AI model retraining using all match stats."""
-    all_stats = []
-    async for stat in db.match_stats.find():
-        all_stats.append(stat)
-    result = ai_predictor.retrain(all_stats)
-    return result
+    """Trigger AI model retraining per sport (sport-isolated)."""
+    results = {}
+    sports = await db.athletes.distinct("sport")
+    for sport_name in sports:
+        athlete_ids = []
+        async for athlete in db.athletes.find({"sport": sport_name}):
+            athlete_ids.append(athlete["_id"])
+        sport_stats = []
+        for aid in athlete_ids:
+            async for stat in db.match_stats.find({"athlete_id": aid}):
+                sport_stats.append(stat)
+        if sport_stats:
+            results[sport_name] = ml_model_resolver.retrain(sport_name, sport_stats)
+    return results
 
 
 @router.post("/ai/retrain/{athlete_id}")
@@ -97,22 +107,30 @@ async def retrain_ai_for_athlete(
     db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
     _admin: Annotated[dict, Depends(require_admin)],
 ):
-    """Retrain AI and update athlete's ai_score."""
+    """Retrain AI and update athlete's ai_score (sport-aware)."""
+    athlete = await db.athletes.find_one({"_id": ObjectId(athlete_id)})
+    if athlete is None:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
     stats = []
     async for stat in db.match_stats.find({"athlete_id": ObjectId(athlete_id)}):
         stats.append(stat)
     if not stats:
         raise HTTPException(status_code=400, detail="No match stats available for retraining")
 
-    ai_predictor.retrain(stats)
-    new_score = ai_predictor.compute_ai_score(stats)
+    sport_name = athlete.get("sport", "")
+    ml_model_resolver.retrain(sport_name, stats)
+
+    sport_config = await sport_config_service.get_by_name(db, sport_name)
+    ai_weights = sport_config.get("ai_weights") if sport_config else None
+    new_score = ml_model_resolver.compute_ai_score(sport_name, ai_weights, stats)
 
     await db.athletes.update_one(
         {"_id": ObjectId(athlete_id)},
         {"$set": {"ai_score": new_score}},
     )
     pricing = await recalculate_athlete_price(db, athlete_id)
-    return {"ai_score": new_score, **pricing}
+    return {"ai_score": new_score, "sport": sport_name, **pricing}
 
 
 @router.post("/price/recalculate-all")

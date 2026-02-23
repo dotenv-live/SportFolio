@@ -28,6 +28,9 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 
 from app.core.config import get_settings
+from app.services.performance_engine import hybrid_performance_service
+from app.services.sport_config import sport_config_service
+from app.ai.model_resolver import ml_model_resolver
 
 # ---------- Performance Score Weights ----------
 W_ACTUAL_SCORE = 0.30
@@ -103,21 +106,36 @@ async def recalculate_athlete_price(
     if doc is None:
         raise ValueError(f"Athlete {athlete_id} not found")
 
-    # --- AI Score (may already be set externally or via /ai/retrain) ---
-    ai_score = doc.get("ai_score", 0.0)
-
     # --- Derive sub-scores from latest match stats if available ---
     latest_stat = await db.match_stats.find_one(
         {"athlete_id": athlete_id},
         sort=[("match_date", -1)],
     )
-    actual_score = 0.5
+
+    # --- Sport-dynamic AI score ---
+    ai_score = doc.get("ai_score", 0.0)
+    sport_name = doc.get("sport", "")
+    sport_config = await sport_config_service.get_by_name(db, sport_name)
+    if sport_config is not None:
+        # Recompute AI = λ₁·XGB + λ₂·LSTM using sport-specific weights
+        athlete_stats = []
+        async for s_doc in db.match_stats.find({"athlete_id": athlete_id}).sort("match_date", -1).limit(50):
+            athlete_stats.append(s_doc)
+        if athlete_stats:
+            ai_weights = sport_config.get("ai_weights")
+            ai_score = ml_model_resolver.compute_ai_score(sport_name, ai_weights, athlete_stats)
+
+    # --- Sport-dynamic actual score (A) ---
+    actual_score = await hybrid_performance_service.compute_actual_score(
+        db, doc, latest_stat, ai_score,
+    )
+
+    # --- Consistency, growth, fitness remain stat-sourced (unchanged) ---
     consistency = 0.5
     growth = 0.5
     fitness = 0.5
     if latest_stat and latest_stat.get("stats"):
         s = latest_stat["stats"]
-        actual_score = float(s.get("actual_score", s.get("score", 0.5)))
         consistency = float(s.get("consistency", 0.5))
         growth = float(s.get("growth", 0.5))
         fitness = float(s.get("fitness", 0.5))

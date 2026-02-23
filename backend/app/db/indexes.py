@@ -12,6 +12,9 @@ async def create_indexes(db: AsyncIOMotorDatabase) -> None:
     await db.athletes.create_index("sport")
     await db.athletes.create_index("name")
 
+    # Sports – unique name
+    await db.sports.create_index("name", unique=True)
+
     # Holdings – compound unique
     await db.holdings.create_index(
         [("user_id", 1), ("athlete_id", 1)],

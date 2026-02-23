@@ -12,6 +12,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.indexes import create_indexes
+from app.services.sport_config import sport_config_service
 
 ATHLETES = [
     {
@@ -141,7 +142,7 @@ async def seed():
     db = client[settings.mongo_db]
 
     # Drop existing collections
-    for coll in ["users", "athletes", "holdings", "transactions", "income_events", "match_stats"]:
+    for coll in ["users", "athletes", "holdings", "transactions", "income_events", "match_stats", "sports"]:
         await db[coll].drop()
 
     await create_indexes(db)
@@ -180,6 +181,11 @@ async def seed():
             })
     await db.match_stats.insert_many(match_stats)
     print(f"✓ Inserted {len(match_stats)} match stat records")
+
+    # Seed default sport configurations
+    await sport_config_service.ensure_defaults(db)
+    sport_count = await db.sports.count_documents({})
+    print(f"✓ Seeded {sport_count} sport configurations")
 
     # Insert sample income events
     income_events = []
