@@ -1,4 +1,5 @@
 import pymongo
+from bson import ObjectId
 from pymongo import ASCENDING, DESCENDING
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -23,61 +24,61 @@ now_utc = datetime.now(timezone.utc).isoformat()
 # --- 2. Real Player Data (Enriched Multi-Category Stats) ---
 players_data = [
     {
-        "_id": "609c71d828d500ebcf9f5201", "name": "Bajrang Punia", "sport": "wrestling",
+        "_id": ObjectId("609c71d828d500ebcf9f5201"), "name": "Bajrang Punia", "sport": "wrestling",
         "career_stats": {
             "65kg_fs": {"label": "Men's 65kg Freestyle", "matches": 142, "medals": {"gold": 12, "silver": 5, "bronze": 8}},
             "61kg_fs": {"label": "Men's 61kg Freestyle", "matches": 38, "medals": {"gold": 1, "silver": 3, "bronze": 2}},
             "60kg_fs": {"label": "Men's 60kg Freestyle", "matches": 55, "medals": {"gold": 3, "silver": 4, "bronze": 5}}
         },
         "competitions": ["olympics", "world_champs", "cwc", "asian_games", "asian_champs"], 
-        "cricsheet_id": "wr_bajrang", "last_updated": now_utc, "total_matches": 235
+        "last_updated": now_utc, "total_matches": 235
     },
     {
-        "_id": "609c71d828d500ebcf9f5202", "name": "Ravi Kumar Dahiya", "sport": "wrestling",
+        "_id": ObjectId("609c71d828d500ebcf9f5202"), "name": "Ravi Kumar Dahiya", "sport": "wrestling",
         "career_stats": {
             "57kg_fs": {"label": "Men's 57kg Freestyle", "matches": 85, "medals": {"gold": 8, "silver": 2, "bronze": 4}}
         },
         "competitions": ["olympics", "world_champs", "asian_champs", "cwc"], 
-        "cricsheet_id": "wr_ravi", "last_updated": now_utc, "total_matches": 85
+        "last_updated": now_utc, "total_matches": 85
     },
     {
-        "_id": "609c71d828d500ebcf9f5203", "name": "Aman Sehrawat", "sport": "wrestling",
+        "_id": ObjectId("609c71d828d500ebcf9f5203"), "name": "Aman Sehrawat", "sport": "wrestling",
         "career_stats": {
             "57kg_fs": {"label": "Men's 57kg Freestyle", "matches": 62, "medals": {"gold": 6, "silver": 1, "bronze": 4}}
         },
         "competitions": ["olympics", "asian_champs", "asian_games", "world_champs"], 
-        "cricsheet_id": "wr_aman", "last_updated": now_utc, "total_matches": 62
+        "last_updated": now_utc, "total_matches": 62
     },
     {
-        "_id": "609c71d828d500ebcf9f5204", "name": "Deepak Punia", "sport": "wrestling",
+        "_id": ObjectId("609c71d828d500ebcf9f5204"), "name": "Deepak Punia", "sport": "wrestling",
         "career_stats": {
             "86kg_fs": {"label": "Men's 86kg Freestyle", "matches": 94, "medals": {"gold": 5, "silver": 6, "bronze": 7}},
             "92kg_fs": {"label": "Men's 92kg Freestyle", "matches": 12, "medals": {"gold": 1, "silver": 0, "bronze": 1}}
         },
         "competitions": ["olympics", "world_champs", "cwc", "asian_games"], 
-        "cricsheet_id": "wr_deepak", "last_updated": now_utc, "total_matches": 106
+        "last_updated": now_utc, "total_matches": 106
     },
     {
-        "_id": "609c71d828d500ebcf9f5205", "name": "Vinesh Phogat", "sport": "wrestling",
+        "_id": ObjectId("609c71d828d500ebcf9f5205"), "name": "Vinesh Phogat", "sport": "wrestling",
         "career_stats": {
             "53kg_fs": {"label": "Women's 53kg Freestyle", "matches": 110, "medals": {"gold": 9, "silver": 2, "bronze": 5}},
             "50kg_fs": {"label": "Women's 50kg Freestyle", "matches": 45, "medals": {"gold": 5, "silver": 1, "bronze": 1}},
             "48kg_fs": {"label": "Women's 48kg Freestyle", "matches": 60, "medals": {"gold": 4, "silver": 3, "bronze": 6}}
         },
         "competitions": ["olympics", "world_champs", "asian_games", "cwc"], 
-        "cricsheet_id": "wr_vinesh", "last_updated": now_utc, "total_matches": 215
+        "last_updated": now_utc, "total_matches": 215
     },
     {
-        "_id": "609c71d828d500ebcf9f5206", "name": "Antim Panghal", "sport": "wrestling",
+        "_id": ObjectId("609c71d828d500ebcf9f5206"), "name": "Antim Panghal", "sport": "wrestling",
         "career_stats": {
             "53kg_fs": {"label": "Women's 53kg Freestyle", "matches": 58, "medals": {"gold": 6, "silver": 2, "bronze": 3}},
             "55kg_fs": {"label": "Women's 55kg Freestyle", "matches": 14, "medals": {"gold": 2, "silver": 0, "bronze": 1}}
         },
         "competitions": ["olympics", "world_champs", "asian_games", "world_u20"], 
-        "cricsheet_id": "wr_antim", "last_updated": now_utc, "total_matches": 72
+        "last_updated": now_utc, "total_matches": 72
     },
     {
-        "_id": "609c71d828d500ebcf9f5207", "name": "Sakshi Malik", "sport": "wrestling",
+        "_id": ObjectId("609c71d828d500ebcf9f5207"), "name": "Sakshi Malik", "sport": "wrestling",
         "career_stats": {
             "58kg_fs": {"label": "Women's 58kg Freestyle", "matches": 75, "medals": {"gold": 3, "silver": 4, "bronze": 8}},
             "60kg_fs": {"label": "Women's 60kg Freestyle", "matches": 22, "medals": {"gold": 1, "silver": 1, "bronze": 3}},
@@ -85,43 +86,43 @@ players_data = [
             "65kg_fs": {"label": "Women's 65kg Freestyle", "matches": 18, "medals": {"gold": 1, "silver": 2, "bronze": 1}}
         },
         "competitions": ["olympics", "cwc", "asian_champs", "world_champs"], 
-        "cricsheet_id": "wr_sakshi", "last_updated": now_utc, "total_matches": 155
+        "last_updated": now_utc, "total_matches": 155
     },
     {
-        "_id": "609c71d828d500ebcf9f5208", "name": "Anshu Malik", "sport": "wrestling",
+        "_id": ObjectId("609c71d828d500ebcf9f5208"), "name": "Anshu Malik", "sport": "wrestling",
         "career_stats": {
             "57kg_fs": {"label": "Women's 57kg Freestyle", "matches": 68, "medals": {"gold": 5, "silver": 6, "bronze": 4}},
             "59kg_fs": {"label": "Women's 59kg Freestyle", "matches": 15, "medals": {"gold": 2, "silver": 1, "bronze": 1}}
         },
         "competitions": ["olympics", "world_champs", "asian_champs", "cwc"], 
-        "cricsheet_id": "wr_anshu", "last_updated": now_utc, "total_matches": 83
+        "last_updated": now_utc, "total_matches": 83
     },
     {
-        "_id": "609c71d828d500ebcf9f5209", "name": "Reetika Hooda", "sport": "wrestling",
+        "_id": ObjectId("609c71d828d500ebcf9f5209"), "name": "Reetika Hooda", "sport": "wrestling",
         "career_stats": {
             "76kg_fs": {"label": "Women's 76kg Freestyle", "matches": 35, "medals": {"gold": 3, "silver": 1, "bronze": 3}},
             "72kg_fs": {"label": "Women's 72kg Freestyle", "matches": 20, "medals": {"gold": 1, "silver": 2, "bronze": 2}}
         },
         "competitions": ["olympics", "world_u23", "asian_champs"], 
-        "cricsheet_id": "wr_reetika", "last_updated": now_utc, "total_matches": 55
+        "last_updated": now_utc, "total_matches": 55
     },
     {
-        "_id": "609c71d828d500ebcf9f5210", "name": "Nisha Dahiya", "sport": "wrestling",
+        "_id": ObjectId("609c71d828d500ebcf9f5210"), "name": "Nisha Dahiya", "sport": "wrestling",
         "career_stats": {
             "68kg_fs": {"label": "Women's 68kg Freestyle", "matches": 42, "medals": {"gold": 2, "silver": 3, "bronze": 4}},
             "65kg_fs": {"label": "Women's 65kg Freestyle", "matches": 28, "medals": {"gold": 1, "silver": 1, "bronze": 3}}
         },
         "competitions": ["olympics", "asian_champs", "world_u23"], 
-        "cricsheet_id": "wr_nisha", "last_updated": now_utc, "total_matches": 70
+        "last_updated": now_utc, "total_matches": 70
     }
 ]
 
 # --- 3. Real Match Data (Exact Historical Bouts) ---
 def build_match(m_id, p_id, p_name, ext_id, date, comp_code, comp_label, m_type, event, opponent, status, result, pts_scored, pts_conceded):
     return {
-        "_id": m_id, "player_id": p_id, "match_id": ext_id, "date": date, "ingested_at": now_utc,
+        "player_id": ObjectId(p_id), "match_id": ext_id, "date": date, "ingested_at": now_utc,
         "stats": {
-            "player_name": p_name, "cricsheet_id": f"wr_{p_name.split()[0].lower()}",
+            "player_name": p_name,
             "competition": comp_code, "competition_label": comp_label, "match_type": m_type, "event": event,
             "opponent_name": opponent,
             "performance": {
