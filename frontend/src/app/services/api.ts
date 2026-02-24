@@ -384,6 +384,10 @@ export const adminApi = {
     const { data } = await api.post('/admin/liquidity/audit');
     return data;
   },
+  async simulateMatch(playerId: string, quality: 'excellent' | 'terrible') {
+    const { data } = await api.post('/admin/simulate-match', { player_id: playerId, quality });
+    return data;
+  },
 };
 
 export default api;
