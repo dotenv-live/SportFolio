@@ -115,19 +115,18 @@ class SportConfigService:
     # Default sport creation (backward compatibility)
     # ------------------------------------------------------------------
     async def ensure_defaults(self, db: AsyncIOMotorDatabase) -> None:
-        """Create default sport configs if the collection is empty."""
-        count = await db.sports.count_documents({})
-        if count > 0:
-            return
-
-        logger.info("No sport configs found – seeding defaults …")
+        """Create default sport configs for any that don't already exist."""
         for sport_data in _DEFAULT_SPORTS:
+            existing = await db.sports.find_one(
+                {"name": {"$regex": f"^{sport_data['name']}$", "$options": "i"}}
+            )
+            if existing:
+                continue
             try:
                 await self.create(db, sport_data)
                 logger.info("  Created default config: %s", sport_data["name"])
             except ValueError:
-                pass  # already exists
-        logger.info("Default sport configs seeded.")
+                pass  # race-condition guard
 
 
 # Module-level singleton

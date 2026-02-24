@@ -105,6 +105,10 @@ async def recalculate_player_price(
     Full price recalculation pipeline for a single player.
     Reads current doc, computes FV, DI, raw P, applies smoothing, persists.
     Returns updated pricing fields.
+
+    NOTE: Sub-scores (consistency, growth, fitness, actual, ai) must already
+    be computed and stored on the player document by the sport-specific
+    ``compute_all_scores`` pipeline *before* calling this function.
     """
     if isinstance(player_id, str):
         player_id = ObjectId(player_id)
@@ -113,31 +117,9 @@ async def recalculate_player_price(
     if doc is None:
         raise ValueError(f"Player {player_id} not found")
 
-    # --- Derive sub-scores from latest match stats if available ---
-    latest_stat = await db.player_matches.find_one(
-        {"player_id": player_id},
-        sort=[("date", -1)],
-    )
-
-    # --- Sport-dynamic AI score ---
-    ai_score = doc.get("ai_score", 0.0)
-    sport_name = doc.get("sport", "")
-    sport_config = await sport_config_service.get_by_name(db, sport_name)
-    if sport_config is not None:
-        # Recompute AI = λ₁·XGB + λ₂·LSTM using sport-specific weights
-        player_stats = []
-        async for s_doc in db.player_matches.find({"player_id": player_id}).sort("date", -1).limit(50):
-            player_stats.append(s_doc)
-        if player_stats:
-            ai_weights = sport_config.get("ai_weights")
-            ai_score = ml_model_resolver.compute_ai_score(sport_name, ai_weights, player_stats)
-
-    # --- Sport-dynamic actual score (A) ---
-    actual_score = await hybrid_performance_service.compute_actual_score(
-        db, doc, latest_stat, ai_score,
-    )
-
-    # --- Consistency, growth, fitness from player doc (set by cron) ---
+    # --- Read pre-computed sub-scores from player doc ---
+    ai_score = float(doc.get("ai_score", 0.0))
+    actual_score = float(doc.get("actual_score", 0.0))
     consistency = float(doc.get("consistency_score", 0.5))
     growth = float(doc.get("growth_score", 0.5))
     fitness = float(doc.get("fitness_score", 0.5))
