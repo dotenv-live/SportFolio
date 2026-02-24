@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { mockPriceAlerts, mockAthletes } from '../data/mockData';
+import { usePlayers, usePriceAlerts } from '../hooks/useApi';
 import { ArrowLeft, Bell, Plus, TrendingUp, TrendingDown, X, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -9,7 +9,9 @@ interface AlertsProps {
 }
 
 export default function Alerts({ hideHeader = false }: AlertsProps) {
-  const [alerts, setAlerts] = useState(mockPriceAlerts);
+  const { data: initialAlerts = [] } = usePriceAlerts();
+  const { data: allAthletes = [] } = usePlayers();
+  const [alerts, setAlerts] = useState(initialAlerts);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedAthlete, setSelectedAthlete] = useState('');
   const [alertCondition, setAlertCondition] = useState<'above' | 'below' | 'change'>('above');
@@ -40,7 +42,7 @@ export default function Alerts({ hideHeader = false }: AlertsProps) {
       return;
     }
 
-    const athlete = mockAthletes.find(a => a.id === selectedAthlete);
+    const athlete = allAthletes.find(a => a.id === selectedAthlete);
     if (!athlete) return;
 
     const newAlert = {
@@ -285,7 +287,7 @@ export default function Alerts({ hideHeader = false }: AlertsProps) {
               <div>
                 <label className="text-sm font-semibold mb-3 block">Select Athlete</label>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {mockAthletes.map((athlete) => (
+                  {allAthletes.map((athlete) => (
                     <button
                       key={athlete.id}
                       onClick={() => setSelectedAthlete(athlete.id)}

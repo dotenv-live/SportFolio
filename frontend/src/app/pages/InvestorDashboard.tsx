@@ -1,5 +1,8 @@
 import { Link } from 'react-router';
-import { mockInvestments, mockUser, calculatePortfolioValue, calculateTotalROI, mockAthletes, mockNotifications } from '../data/mockData';
+import { calculatePortfolioValue, calculateTotalROI } from '../data/types';
+import { DashboardSkeleton } from '../components/skeletons';
+import { useHoldings, usePlayers, useNotifications } from '../hooks/useApi';
+import { useAuth } from '../context/AuthContext';
 import { TrendingUp, ChevronRight, Search, Bell } from 'lucide-react';
 import { Sparkline } from '../components/Sparkline';
 import { BottomNavigation } from '../components/BottomNavigation';
@@ -9,11 +12,17 @@ interface InvestorDashboardProps {
 }
 
 export default function InvestorDashboard({ hideHeader = false }: InvestorDashboardProps) {
-  const portfolioValue = calculatePortfolioValue(mockInvestments);
-  const totalInvested = mockInvestments.reduce((sum, inv) => sum + inv.investedAmount, 0);
-  const totalROI = calculateTotalROI(mockInvestments);
+  const { data: investments = [], isLoading: loadingInv } = useHoldings();
+  const { data: athletes = [], isLoading: loadingAth } = usePlayers();
+  const { data: notifications = [] } = useNotifications();
+  const { user } = useAuth();
+
+  const isLoading = loadingInv || loadingAth;
+  const portfolioValue = calculatePortfolioValue(investments);
+  const totalInvested = investments.reduce((sum, inv) => sum + inv.investedAmount, 0);
+  const totalROI = calculateTotalROI(investments);
   const totalGain = portfolioValue - totalInvested;
-  const unreadNotifications = mockNotifications.filter(n => !n.read).length;
+  const unreadNotifications = notifications.filter(n => !n.read).length;
 
   return (
     <div className="min-h-screen bg-black text-white pb-24">
@@ -40,7 +49,7 @@ export default function InvestorDashboard({ hideHeader = false }: InvestorDashbo
               </Link>
               <Link to="/investor">
                 <button className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-black font-semibold text-sm">
-                  {mockUser.name.charAt(0)}
+                  {(user?.name ?? 'U').charAt(0)}
                 </button>
               </Link>
             </div>
@@ -48,6 +57,8 @@ export default function InvestorDashboard({ hideHeader = false }: InvestorDashbo
         </div>
       )}
 
+      {isLoading ? <DashboardSkeleton /> : (
+      <>
       {/* Portfolio Value */}
       <div className="px-4 py-6 border-b border-white/[0.08]">
         <div className="text-sm text-neutral-500 mb-2">Portfolio Value</div>
@@ -71,12 +82,12 @@ export default function InvestorDashboard({ hideHeader = false }: InvestorDashbo
           </div>
           <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
             <div className="text-xs text-neutral-500 mb-1">Holdings</div>
-            <div className="text-base font-semibold">{mockInvestments.length}</div>
+            <div className="text-base font-semibold">{investments.length}</div>
           </div>
           <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
             <div className="text-xs text-neutral-500 mb-1">Revenue</div>
             <div className="text-base font-semibold text-emerald-500">
-              ₹{mockInvestments.reduce((sum, inv) => sum + inv.revenueEarned, 0).toLocaleString()}
+              ₹{investments.reduce((sum, inv) => sum + inv.revenueEarned, 0).toLocaleString()}
             </div>
           </div>
         </div>
@@ -95,8 +106,8 @@ export default function InvestorDashboard({ hideHeader = false }: InvestorDashbo
         </div>
 
         <div className="space-y-0">
-          {mockInvestments.map((investment) => {
-            const athlete = mockAthletes.find((a) => a.id === investment.athleteId);
+          {investments.map((investment) => {
+            const athlete = athletes.find((a) => a.id === investment.athleteId);
             const isGain = investment.roi >= 0;
 
             return (
@@ -158,7 +169,7 @@ export default function InvestorDashboard({ hideHeader = false }: InvestorDashbo
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {mockAthletes
+          {athletes
             .filter((a) => Math.abs(a.priceChange24h) > 1)
             .slice(0, 4)
             .map((athlete) => {
@@ -191,6 +202,8 @@ export default function InvestorDashboard({ hideHeader = false }: InvestorDashbo
             })}
         </div>
       </div>
+      </>
+      )}
 
       {/* Bottom Navigation */}
       <BottomNavigation />

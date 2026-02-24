@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { mockAthletes, mockUser } from '../data/mockData';
+import { usePlayer, useBuy, useSell } from '../hooks/useApi';
+import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, TrendingUp, TrendingDown, X, Info, Calendar, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
@@ -12,7 +13,10 @@ type OrderSide = 'buy' | 'sell';
 export default function Trading() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const athlete = mockAthletes.find((a) => a.id === id);
+  const { data: athlete } = usePlayer(id);
+
+  const buyMutation = useBuy();
+  const sellMutation = useSell();
 
   const [orderType, setOrderType] = useState<OrderType>('limit');
   const [orderSide, setOrderSide] = useState<OrderSide>('buy');
@@ -62,19 +66,26 @@ export default function Trading() {
     setShowConfirmation(true);
   };
 
-  const handleConfirmOrder = () => {
+  const handleConfirmOrder = async () => {
     setIsProcessing(true);
-
-    setTimeout(() => {
+    try {
+      if (orderSide === 'buy') {
+        await buyMutation.mutateAsync({ playerId: athlete!.id, shares: units });
+      } else {
+        await sellMutation.mutateAsync({ playerId: athlete!.id, shares: units });
+      }
       setIsProcessing(false);
       setShowSuccess(true);
-
       setTimeout(() => {
         setShowSuccess(false);
         setShowConfirmation(false);
-        navigate(`/athlete/${athlete.id}`);
+        navigate(`/athlete/${athlete!.id}`);
       }, 2000);
-    }, 1500);
+    } catch (err: any) {
+      setIsProcessing(false);
+      toast.error(err?.response?.data?.detail || err.message || 'Order failed');
+      setShowConfirmation(false);
+    }
   };
 
   const getOrderTypeDescription = () => {

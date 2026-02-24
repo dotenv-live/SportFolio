@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '../components/ui/button';
-import { mockAthletes, mockUser, mockInvestments } from '../data/mockData';
+import { usePlayer, useHoldings } from '../hooks/useApi';
+import { usePlayerPriceSocket } from '../hooks/useWebSocket';
+import { useAuth } from '../context/AuthContext';
+import { tradingApi } from '../services/api';
+import { AthleteDetailSkeleton } from '../components/skeletons';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Plus, ChevronDown, ChevronUp, Calendar, Info, X, Check, Star, Share2, Users, BookOpen, BarChart3, AlertCircle, Bell } from 'lucide-react';
 import { ResponsiveContainer, Area, AreaChart, Tooltip, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { toast } from 'sonner';
@@ -11,7 +15,7 @@ import { toast } from 'sonner';
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
-    
+
     return (
       <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-lg p-3 shadow-lg backdrop-blur-sm">
         <div className="text-xs text-neutral-500 mb-1">{data.opponent}</div>
@@ -29,8 +33,11 @@ const CustomTooltip = ({ active, payload }: any) => {
 export default function AthleteDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const athlete = mockAthletes.find((a) => a.id === id);
-  const userInvestment = mockInvestments.find((inv) => inv.athleteId === id);
+  const { data: apiAthlete, isLoading } = usePlayer(id);
+  usePlayerPriceSocket(id);
+  const { data: investments = [] } = useHoldings();
+  const athlete = apiAthlete ?? null;
+  const userInvestment = investments.find((inv: any) => inv.athleteId === id);
   const hasShares = !!userInvestment;
 
   const [units, setUnits] = useState(10);
@@ -47,6 +54,8 @@ export default function AthleteDetail() {
   const [fundamentalsExpanded, setFundamentalsExpanded] = useState(true);
   const [contractExpanded, setContractExpanded] = useState(true);
 
+  if (isLoading) return <AthleteDetailSkeleton />;
+
   if (!athlete) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -60,15 +69,19 @@ export default function AthleteDetail() {
     );
   }
 
-  const lastMatchChange = athlete.priceChange24h;
-  const isGain = lastMatchChange >= 0;
+  // Compute price change from the last two price history entries (reflects last trade)
+  const ph = athlete.priceHistory ?? [];
+  const priceChange = ph.length >= 2
+    ? Math.round(((ph[ph.length - 1] - ph[ph.length - 2]) / ph[ph.length - 2]) * 10000) / 100
+    : (athlete.priceChange24h ?? 0);
+  const isGain = priceChange >= 0;
   const totalCost = units * athlete.pricePerUnit;
   const platformFee = totalCost * 0.01; // 1% platform fee
   const totalPayable = totalCost + platformFee;
 
   // Calculate season high/low
-  const seasonHigh = Math.max(...(athlete.priceHistory || []));
-  const seasonLow = Math.min(...(athlete.priceHistory || []));
+  const seasonHigh = ph.length ? Math.max(...ph) : athlete.pricePerUnit;
+  const seasonLow = ph.length ? Math.min(...ph) : athlete.pricePerUnit;
   const lastMatch = athlete.recentMatches[0];
   const nextMatch = athlete.upcomingMatches?.[0];
 
@@ -85,6 +98,16 @@ export default function AthleteDetail() {
 
   const filteredChartData = getFilteredChartData();
 
+  // Widen Y-axis range so price movements are visually prominent
+  const chartPrices = filteredChartData.map((d: any) => d.price);
+  const chartMin = chartPrices.length ? Math.min(...chartPrices) : 0;
+  const chartMax = chartPrices.length ? Math.max(...chartPrices) : 0;
+  const chartPad = Math.max((chartMax - chartMin) * 0.35, chartMax * 0.02);
+  const yDomain: [number, number] = [
+    Math.max(0, chartMin - chartPad),
+    chartMax + chartPad,
+  ];
+
   const handleBuyClick = () => {
     setTransactionType('buy');
     setShowBuySheet(true);
@@ -97,27 +120,27 @@ export default function AthleteDetail() {
     setUnits(Math.min(10, userInvestment?.units || 10));
   };
 
-  const handleTransaction = () => {
+  const handleTransaction = async () => {
     setIsProcessing(true);
-    
-    setTimeout(() => {
+    try {
+      if (transactionType === 'buy') {
+        await tradingApi.buy(athlete!.id, units);
+      } else {
+        await tradingApi.sell(athlete!.id, units);
+      }
       setIsProcessing(false);
       setShowSuccess(true);
-
-      setTimeout(() => {
-        setShowSuccess(false);
-        setShowBuySheet(false);
-        setShowSellSheet(false);
-        navigate('/portfolio');
-      }, 2000);
-    }, 1500);
+    } catch (err: any) {
+      setIsProcessing(false);
+      toast.error(err.message || 'Transaction failed');
+    }
   };
 
   const handleToggleWatchlist = () => {
     athlete.isWatchlisted = !athlete.isWatchlisted;
     toast.success(
-      athlete.isWatchlisted 
-        ? `${athlete.name} added to watchlist` 
+      athlete.isWatchlisted
+        ? `${athlete.name} added to watchlist`
         : `${athlete.name} removed from watchlist`
     );
   };
@@ -176,9 +199,9 @@ export default function AthleteDetail() {
           <div className="flex items-center gap-2">
             <div className={`flex items-center gap-1 text-sm font-medium ${isGain ? 'text-emerald-500' : 'text-red-500'}`}>
               {isGain ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              {isGain ? '+' : ''}₹{Math.abs(athlete.pricePerUnit * lastMatchChange / 100).toFixed(2)} ({isGain ? '+' : ''}{lastMatchChange}%)
+              {isGain ? '+' : ''}₹{Math.abs(athlete.pricePerUnit * priceChange / 100).toFixed(2)} ({isGain ? '+' : ''}{priceChange.toFixed(2)}%)
             </div>
-            <div className="text-xs text-neutral-500">Last match</div>
+            <div className="text-xs text-neutral-500">Price change</div>
           </div>
         </div>
       </div>
@@ -194,6 +217,7 @@ export default function AthleteDetail() {
                   <stop offset="100%" stopColor={isGain ? '#10b981' : '#ef4444'} stopOpacity={0} />
                 </linearGradient>
               </defs>
+              <YAxis domain={yDomain} hide />
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ffffff', strokeWidth: 1, strokeDasharray: '3 3' }} />
               <Area
                 type="monotone"
@@ -213,11 +237,10 @@ export default function AthleteDetail() {
             <button
               key={range}
               onClick={() => setChartRange(range)}
-              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                chartRange === range
-                  ? 'bg-white text-black'
-                  : 'bg-transparent text-neutral-500 hover:text-white'
-              }`}
+              className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${chartRange === range
+                ? 'bg-white text-black'
+                : 'bg-transparent text-neutral-500 hover:text-white'
+                }`}
             >
               {range}
             </button>
@@ -232,11 +255,10 @@ export default function AthleteDetail() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab.toLowerCase())}
-              className={`pb-3 text-sm font-medium transition-colors relative ${
-                activeTab === tab.toLowerCase()
-                  ? 'text-white'
-                  : 'text-neutral-500'
-              }`}
+              className={`pb-3 text-sm font-medium transition-colors relative ${activeTab === tab.toLowerCase()
+                ? 'text-white'
+                : 'text-neutral-500'
+                }`}
             >
               {tab}
               {activeTab === tab.toLowerCase() && (
@@ -252,7 +274,7 @@ export default function AthleteDetail() {
         <>
           {/* Performance Section */}
           <div className="px-4 py-4 border-b border-white/[0.08]">
-            <button 
+            <button
               onClick={() => setPerformanceExpanded(!performanceExpanded)}
               className="w-full flex items-center justify-between mb-3"
             >
@@ -295,7 +317,7 @@ export default function AthleteDetail() {
 
           {/* Fundamentals */}
           <div className="px-4 py-4 border-b border-white/[0.08]">
-            <button 
+            <button
               onClick={() => setFundamentalsExpanded(!fundamentalsExpanded)}
               className="w-full flex items-center justify-between mb-3"
             >
@@ -306,107 +328,219 @@ export default function AthleteDetail() {
                 <ChevronDown className="w-4 h-4 text-neutral-500" />
               )}
             </button>
-            
+
             {fundamentalsExpanded && (
               <div className="space-y-4">
-                {/* T20 Format */}
-                <div>
-                  <div className="text-xs text-neutral-500 mb-2 uppercase tracking-wider">T20 Format</div>
-                  <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-xs text-neutral-500">Matches</div>
-                        <div className="text-sm font-semibold">45</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Runs</div>
-                        <div className="text-sm font-semibold">1,250</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Average</div>
-                        <div className="text-sm font-semibold">32.5</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Strike Rate</div>
-                        <div className="text-sm font-semibold">145.2</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Highest Score</div>
-                        <div className="text-sm font-semibold">89*</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">50s/100s</div>
-                        <div className="text-sm font-semibold">8/0</div>
+                {athlete.sport?.toLowerCase() === 'swimming' && athlete.swimmingCareerStats ? (
+                  /* ─── Swimming Career Stats ─── */
+                  <>
+                    {/* Overview stats */}
+                    <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="text-center">
+                          <div className="text-xs text-neutral-500">Total Races</div>
+                          <div className="text-lg font-bold text-white">{athlete.stats.totalRaces ?? 0}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-neutral-500">Medals</div>
+                          <div className="text-lg font-bold text-yellow-500">{athlete.stats.totalMedals ?? 0}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-neutral-500">Best FINA</div>
+                          <div className="text-lg font-bold text-cyan-400">{athlete.stats.bestFinaPoints ?? 0}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* ODI Format */}
-                <div>
-                  <div className="text-xs text-neutral-500 mb-2 uppercase tracking-wider">ODI Format</div>
-                  <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-xs text-neutral-500">Matches</div>
-                        <div className="text-sm font-semibold">32</div>
+                    {/* Per-event stats */}
+                    {Object.entries(athlete.swimmingCareerStats).map(([eventKey, event]) => (
+                      <div key={eventKey}>
+                        <div className="text-xs text-neutral-500 mb-2 uppercase tracking-wider">{event.label}</div>
+                        <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-xs text-neutral-500">Races</div>
+                              <div className="text-sm font-semibold">{event.races}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500">Personal Best</div>
+                              <div className="text-sm font-semibold text-cyan-400">{event.personal_best?.time ?? '—'}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500">FINA Points</div>
+                              <div className="text-sm font-semibold">{event.personal_best?.fina_points ?? 0}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500">PB Meet</div>
+                              <div className="text-sm font-semibold truncate" title={event.personal_best?.meet_name}>
+                                {event.personal_best?.meet_name ?? '—'}
+                              </div>
+                            </div>
+                          </div>
+                          {/* Medals row */}
+                          <div className="mt-3 pt-3 border-t border-white/[0.06]">
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-4 h-4 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                                  <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                                </div>
+                                <span className="text-xs font-medium text-yellow-500">{event.medals?.gold ?? 0}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-4 h-4 rounded-full bg-neutral-400/20 flex items-center justify-center">
+                                  <div className="w-2 h-2 rounded-full bg-neutral-400" />
+                                </div>
+                                <span className="text-xs font-medium text-neutral-400">{event.medals?.silver ?? 0}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-4 h-4 rounded-full bg-amber-700/20 flex items-center justify-center">
+                                  <div className="w-2 h-2 rounded-full bg-amber-700" />
+                                </div>
+                                <span className="text-xs font-medium text-amber-700">{event.medals?.bronze ?? 0}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Runs</div>
-                        <div className="text-sm font-semibold">1,560</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Average</div>
-                        <div className="text-sm font-semibold">48.7</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Strike Rate</div>
-                        <div className="text-sm font-semibold">92.3</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Highest Score</div>
-                        <div className="text-sm font-semibold">127</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">50s/100s</div>
-                        <div className="text-sm font-semibold">12/3</div>
+                    ))}
+                  </>
+                ) : athlete.sport?.toLowerCase() === 'wrestling' && athlete.wrestlingCareerStats ? (
+                  /* ─── Wrestling Career Stats ─── */
+                  <>
+                    {/* Overview stats */}
+                    <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="text-center">
+                          <div className="text-xs text-neutral-500">Total Bouts</div>
+                          <div className="text-lg font-bold text-white">{athlete.stats.totalBouts ?? athlete.stats.matches}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-neutral-500">Medals</div>
+                          <div className="text-lg font-bold text-yellow-500">{athlete.stats.totalWrestlingMedals ?? 0}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-neutral-500">Win Rate</div>
+                          <div className="text-lg font-bold text-orange-400">{athlete.stats.winRate ?? 0}%</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Test Format */}
-                <div>
-                  <div className="text-xs text-neutral-500 mb-2 uppercase tracking-wider">Test Format</div>
-                  <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-xs text-neutral-500">Matches</div>
-                        <div className="text-sm font-semibold">18</div>
+                    {/* Per-weight-class stats */}
+                    {Object.entries(athlete.wrestlingCareerStats).map(([wcKey, wc]) => (
+                      <div key={wcKey}>
+                        <div className="text-xs text-neutral-500 mb-2 uppercase tracking-wider">{wc.label}</div>
+                        <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                              <div className="text-xs text-neutral-500">Bouts</div>
+                              <div className="text-sm font-semibold">{wc.matches}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500">Total Medals</div>
+                              <div className="text-sm font-semibold">{(wc.medals?.gold ?? 0) + (wc.medals?.silver ?? 0) + (wc.medals?.bronze ?? 0)}</div>
+                            </div>
+                          </div>
+                          {/* Medals row */}
+                          <div className="pt-3 border-t border-white/[0.06]">
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-4 h-4 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                                  <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                                </div>
+                                <span className="text-xs font-medium text-yellow-500">{wc.medals?.gold ?? 0}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-4 h-4 rounded-full bg-neutral-400/20 flex items-center justify-center">
+                                  <div className="w-2 h-2 rounded-full bg-neutral-400" />
+                                </div>
+                                <span className="text-xs font-medium text-neutral-400">{wc.medals?.silver ?? 0}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-4 h-4 rounded-full bg-amber-700/20 flex items-center justify-center">
+                                  <div className="w-2 h-2 rounded-full bg-amber-700" />
+                                </div>
+                                <span className="text-xs font-medium text-amber-700">{wc.medals?.bronze ?? 0}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Runs</div>
-                        <div className="text-sm font-semibold">980</div>
+                    ))}
+                  </>
+                ) : (
+                  /* ─── Cricket Career Stats (default) ─── */
+                  <>
+                    {athlete.careerStats && Object.entries(athlete.careerStats).map(([formatKey, format]: [string, any]) => (
+                      <div key={formatKey}>
+                        <div className="text-xs text-neutral-500 mb-2 uppercase tracking-wider">{format.label ?? formatKey}</div>
+                        <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-xs text-neutral-500">Matches</div>
+                              <div className="text-sm font-semibold">{format.matches ?? format.batting?.matches ?? 0}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500">Runs</div>
+                              <div className="text-sm font-semibold">{format.batting?.runs?.toLocaleString() ?? '—'}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500">Average</div>
+                              <div className="text-sm font-semibold">{format.batting?.average ?? '—'}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500">Strike Rate</div>
+                              <div className="text-sm font-semibold">{format.batting?.strike_rate ?? '—'}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500">Highest Score</div>
+                              <div className="text-sm font-semibold">{format.batting?.highest ?? '—'}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500">50s/100s</div>
+                              <div className="text-sm font-semibold">{format.batting?.fifties ?? 0}/{format.batting?.hundreds ?? 0}</div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Average</div>
-                        <div className="text-sm font-semibold">42.6</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Strike Rate</div>
-                        <div className="text-sm font-semibold">56.8</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">Highest Score</div>
-                        <div className="text-sm font-semibold">156</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-neutral-500">50s/100s</div>
-                        <div className="text-sm font-semibold">5/2</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                    ))}
+                    {/* Fallback for no career stats */}
+                    {(!athlete.careerStats || Object.keys(athlete.careerStats).length === 0) && (
+                      <>
+                        <div>
+                          <div className="text-xs text-neutral-500 mb-2 uppercase tracking-wider">T20 Format</div>
+                          <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <div className="text-xs text-neutral-500">Matches</div>
+                                <div className="text-sm font-semibold">45</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-neutral-500">Runs</div>
+                                <div className="text-sm font-semibold">1,250</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-neutral-500">Average</div>
+                                <div className="text-sm font-semibold">32.5</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-neutral-500">Strike Rate</div>
+                                <div className="text-sm font-semibold">145.2</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-neutral-500">Highest Score</div>
+                                <div className="text-sm font-semibold">89*</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-neutral-500">50s/100s</div>
+                                <div className="text-sm font-semibold">8/0</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -415,25 +549,44 @@ export default function AthleteDetail() {
           <div className="px-4 py-4 border-b border-white/[0.08]">
             <h3 className="text-sm font-semibold mb-3">About</h3>
             <p className="text-sm text-neutral-400 leading-relaxed mb-3">
-              {athlete.name} is a promising {athlete.role.toLowerCase()} representing India in international cricket. 
-              Known for exceptional skills and consistent performance, {athlete.name.split(' ')[0]} has shown tremendous 
-              potential in recent matches with a {athlete.performanceScore}/100 performance score.
+              {athlete.sport?.toLowerCase() === 'swimming' ? (
+                <>
+                  {athlete.name} is a competitive swimmer specializing in {athlete.role.toLowerCase()} events.
+                  Known for exceptional technique and consistent performance, {athlete.name.split(' ')[0]} has shown tremendous
+                  potential with a {athlete.performanceScore}/100 performance score.
+                </>
+              ) : athlete.sport?.toLowerCase() === 'wrestling' ? (
+                <>
+                  {athlete.name} is an elite wrestler competing in {athlete.role.toLowerCase()} style.
+                  Known for outstanding technique and mat dominance, {athlete.name.split(' ')[0]} has demonstrated
+                  exceptional grit with a {athlete.performanceScore}/100 performance score.
+                </>
+              ) : (
+                <>
+                  {athlete.name} is a promising {athlete.role.toLowerCase()} representing India in international cricket.
+                  Known for exceptional skills and consistent performance, {athlete.name.split(' ')[0]} has shown tremendous
+                  potential in recent matches with a {athlete.performanceScore}/100 performance score.
+                </>
+              )}
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-lg p-3">
-                <div className="text-xs text-neutral-500 mb-1">Age</div>
-                <div className="text-sm font-semibold">24 years</div>
+                <div className="text-xs text-neutral-500 mb-1">Sport</div>
+                <div className="text-sm font-semibold">{athlete.sport}</div>
               </div>
               <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-lg p-3">
-                <div className="text-xs text-neutral-500 mb-1">Batting</div>
-                <div className="text-sm font-semibold">Right-hand</div>
+                <div className="text-xs text-neutral-500 mb-1">
+                  {athlete.sport?.toLowerCase() === 'swimming' ? 'Specialty' :
+                    athlete.sport?.toLowerCase() === 'wrestling' ? 'Style' : 'Role'}
+                </div>
+                <div className="text-sm font-semibold">{athlete.role}</div>
               </div>
             </div>
           </div>
 
           {/* Contract Terms */}
           <div className="px-4 py-4">
-            <button 
+            <button
               onClick={() => setContractExpanded(!contractExpanded)}
               className="w-full flex items-center justify-between mb-3"
             >
@@ -460,10 +613,9 @@ export default function AthleteDetail() {
                 </div>
                 <div className="flex items-center justify-between py-2">
                   <span className="text-sm text-neutral-500">Risk Tier</span>
-                  <span className={`text-sm font-medium ${
-                    athlete.riskTier === 'Low' ? 'text-emerald-500' :
+                  <span className={`text-sm font-medium ${athlete.riskTier === 'Low' ? 'text-emerald-500' :
                     athlete.riskTier === 'Medium' ? 'text-yellow-500' : 'text-red-500'
-                  }`}>
+                    }`}>
                     {athlete.riskTier}
                   </span>
                 </div>
@@ -512,19 +664,42 @@ export default function AthleteDetail() {
 
           {/* Previous Matches */}
           <div className="px-4 py-4">
-            <h3 className="text-sm font-semibold mb-3">Previous Matches</h3>
+            <h3 className="text-sm font-semibold mb-3">
+              {athlete.sport?.toLowerCase() === 'swimming' ? 'Previous Races' :
+                athlete.sport?.toLowerCase() === 'wrestling' ? 'Previous Bouts' : 'Previous Matches'}
+            </h3>
             <div className="space-y-0">
               {athlete.recentMatches.map((match, index) => {
                 const matchData = athlete.matchHistory?.[index];
                 const matchChange = matchData?.priceChange || 0;
                 const isMatchGain = matchChange >= 0;
+                const sportLower = athlete.sport?.toLowerCase();
 
                 return (
                   <div key={index} className="border-b border-white/[0.05] py-3">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
-                        <div className="text-sm font-medium mb-1">{match.opponent}</div>
-                        <div className="text-xs text-neutral-500">{match.date}</div>
+                        {sportLower === 'swimming' ? (
+                          <>
+                            <div className="text-sm font-medium mb-1">{match.event || match.opponent}</div>
+                            <div className="text-xs text-neutral-500">{match.opponent} • {match.date}</div>
+                          </>
+                        ) : sportLower === 'wrestling' ? (
+                          <>
+                            <div className="text-sm font-medium mb-1">
+                              vs {match.opponent_name || match.opponent}
+                              {match.match_type && (
+                                <span className="ml-2 text-xs text-neutral-500 font-normal">({match.match_type})</span>
+                              )}
+                            </div>
+                            <div className="text-xs text-neutral-500">{match.opponent} • {match.date}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-sm font-medium mb-1">{match.opponent}</div>
+                            <div className="text-xs text-neutral-500">{match.date}</div>
+                          </>
+                        )}
                       </div>
                       <div className={`text-right ${isMatchGain ? 'text-emerald-500' : 'text-red-500'}`}>
                         <div className="text-sm font-semibold">
@@ -535,7 +710,37 @@ export default function AthleteDetail() {
                         </div>
                       </div>
                     </div>
-                    <div className="text-xs text-neutral-400">{match.performance}</div>
+                    {sportLower === 'swimming' ? (
+                      <div className="flex items-center gap-3 text-xs">
+                        {match.time && (
+                          <span className="text-cyan-400 font-medium">{match.time}</span>
+                        )}
+                        {match.rank != null && (
+                          <span className="text-neutral-400">Rank #{match.rank}</span>
+                        )}
+                        {match.fina_points != null && (
+                          <span className="text-neutral-400">{match.fina_points} FINA pts</span>
+                        )}
+                      </div>
+                    ) : sportLower === 'wrestling' ? (
+                      <div className="flex items-center gap-3 text-xs">
+                        {match.result && (
+                          <span className={`font-semibold ${match.result === 'Win' ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {match.result}
+                          </span>
+                        )}
+                        {match.technical_points_scored != null && match.technical_points_conceded != null && (
+                          <span className="text-neutral-400">
+                            {match.technical_points_scored}–{match.technical_points_conceded} pts
+                          </span>
+                        )}
+                        {match.status && (
+                          <span className="text-orange-400 font-medium">{match.status}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-neutral-400">{match.performance}</div>
+                    )}
                   </div>
                 );
               })}
@@ -554,13 +759,13 @@ export default function AthleteDetail() {
       {/* Buy/Sell Buttons - Fixed Bottom */}
       <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-white/[0.08] px-4 py-4 safe-area-bottom">
         {/* Advanced Trading Link */}
-        <Link 
+        <Link
           to={`/trading/${athlete.id}`}
           className="block text-center text-sm text-emerald-500 font-medium mb-3 hover:text-emerald-400"
         >
           Advanced Trading →
         </Link>
-        
+
         {hasShares ? (
           <div className="flex items-center gap-3">
             <Button
@@ -615,7 +820,7 @@ export default function AthleteDetail() {
                       <X className="w-5 h-5" />
                     </button>
                   </div>
-                  
+
                   <div className="mb-6">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-neutral-500">Units</span>
@@ -628,16 +833,23 @@ export default function AthleteDetail() {
                       >
                         <Minus className="w-4 h-4" />
                       </button>
-                      <div className="flex-1 text-center">
-                        <div className="text-2xl font-bold">₹{totalCost.toLocaleString()}</div>
-                        <div className="text-xs text-neutral-500">Total cost</div>
-                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        value={units}
+                        onChange={(e) => setUnits(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-20 h-10 text-center bg-[#1a1a1a] border border-white/[0.08] rounded-lg text-white font-medium focus:outline-none focus:border-emerald-500/50"
+                      />
                       <button
                         onClick={() => setUnits(units + 1)}
                         className="w-10 h-10 flex items-center justify-center border border-white/[0.08] rounded-lg active:bg-[#1a1a1a]"
                       >
                         <Plus className="w-4 h-4" />
                       </button>
+                    </div>
+                    <div className="flex-1 text-center mt-3">
+                      <div className="text-2xl font-bold">₹{totalCost.toLocaleString()}</div>
+                      <div className="text-xs text-neutral-500">Total cost</div>
                     </div>
                   </div>
 
@@ -677,10 +889,10 @@ export default function AthleteDetail() {
                     You bought {units} units of {athlete.name}
                   </p>
                   <Button
-                    onClick={() => navigate('/portfolio')}
+                    onClick={() => { setShowSuccess(false); setShowBuySheet(false); }}
                     className="w-full bg-emerald-500 text-black font-semibold py-6 rounded-xl hover:bg-emerald-400"
                   >
-                    View Portfolio
+                    Done
                   </Button>
                 </div>
               )}
@@ -724,7 +936,7 @@ export default function AthleteDetail() {
                       You own {userInvestment?.units} units worth ₹{userInvestment?.currentValue.toLocaleString()}
                     </div>
                   </div>
-                  
+
                   <div className="mb-6">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-neutral-500">Units to sell</span>
@@ -737,16 +949,24 @@ export default function AthleteDetail() {
                       >
                         <Minus className="w-4 h-4" />
                       </button>
-                      <div className="flex-1 text-center">
-                        <div className="text-2xl font-bold">₹{totalCost.toLocaleString()}</div>
-                        <div className="text-xs text-neutral-500">You'll receive</div>
-                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        max={userInvestment?.units || 10}
+                        value={units}
+                        onChange={(e) => setUnits(Math.min((userInvestment?.units || 10), Math.max(1, parseInt(e.target.value) || 1)))}
+                        className="w-20 h-10 text-center bg-[#1a1a1a] border border-white/[0.08] rounded-lg text-white font-medium focus:outline-none focus:border-red-500/50"
+                      />
                       <button
                         onClick={() => setUnits(Math.min((userInvestment?.units || 10), units + 1))}
                         className="w-10 h-10 flex items-center justify-center border border-white/[0.08] rounded-lg active:bg-[#1a1a1a]"
                       >
                         <Plus className="w-4 h-4" />
                       </button>
+                    </div>
+                    <div className="flex-1 text-center mt-3">
+                      <div className="text-2xl font-bold">₹{totalCost.toLocaleString()}</div>
+                      <div className="text-xs text-neutral-500">You'll receive</div>
                     </div>
                   </div>
 
@@ -786,10 +1006,10 @@ export default function AthleteDetail() {
                     You sold {units} units of {athlete.name}
                   </p>
                   <Button
-                    onClick={() => navigate('/portfolio')}
+                    onClick={() => { setShowSuccess(false); setShowSellSheet(false); }}
                     className="w-full bg-red-500 text-white font-semibold py-6 rounded-xl hover:bg-red-600"
                   >
-                    View Portfolio
+                    Done
                   </Button>
                 </div>
               )}

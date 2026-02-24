@@ -1,23 +1,50 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'motion/react';
-import { 
-  Users, TrendingUp, DollarSign, Activity, 
+import {
+  Users, TrendingUp, DollarSign, Activity,
   Search, Bell, Settings, LogOut, UserCheck,
   ArrowUpRight, ArrowDownRight, Clock, CheckCircle
 } from 'lucide-react';
-import { mockAthletes, mockInvestments, mockUser, mockOrders } from '../data/mockData';
+import { AdminSkeleton } from '../components/skeletons';
+import { usePlayers, useHoldings, useTransactions } from '../hooks/useApi';
+import { adminApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 
 export default function Admin() {
   const [activeTab, setActiveTab] = useState('overview');
+  const { data: athletes = [], isLoading: loadingAth } = usePlayers();
+  const { data: investments = [], isLoading: loadingInv } = useHoldings();
+  const { data: orders = [], isLoading: loadingOrd } = useTransactions(athletes);
+  const { user } = useAuth();
+
+  // Simulate match state
+  const [simulating, setSimulating] = useState<string | null>(null);
+  const [simResult, setSimResult] = useState<any>(null);
+
+  const handleSimulate = async (playerId: string, quality: 'excellent' | 'terrible') => {
+    setSimulating(playerId);
+    setSimResult(null);
+    try {
+      const result = await adminApi.simulateMatch(playerId, quality);
+      setSimResult(result);
+      toast.success(`Simulated ${quality} match for ${result.player_name}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Simulation failed');
+    } finally {
+      setSimulating(null);
+    }
+  };
 
   // Calculate platform metrics
+  const isLoading = loadingAth || loadingInv || loadingOrd;
   const totalUsers = 1247; // Mock data
-  const totalInvestments = mockInvestments.reduce((sum, inv) => sum + inv.currentValue, 0);
+  const totalInvestments = investments.reduce((sum, inv) => sum + inv.currentValue, 0);
   const totalRevenue = totalInvestments * 0.01; // 1% platform fee
-  const activeAthletes = mockAthletes.filter(a => a.unitsAvailable > 0).length;
-  const totalTransactions = mockOrders.length;
-  
+  const activeAthletes = athletes.filter(a => a.unitsAvailable > 0).length;
+  const totalTransactions = orders.length;
+
   // Recent activity
   const recentActivity = [
     {
@@ -101,11 +128,10 @@ export default function Admin() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab.toLowerCase())}
-              className={`pb-3 text-sm font-medium transition-colors relative whitespace-nowrap ${
-                activeTab === tab.toLowerCase()
-                  ? 'text-white'
-                  : 'text-neutral-500'
-              }`}
+              className={`pb-3 text-sm font-medium transition-colors relative whitespace-nowrap ${activeTab === tab.toLowerCase()
+                ? 'text-white'
+                : 'text-neutral-500'
+                }`}
             >
               {tab}
               {activeTab === tab.toLowerCase() && (
@@ -118,167 +144,168 @@ export default function Admin() {
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
-        <div className="px-4 py-4 space-y-4">
-          {/* Key Metrics */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
-                  <Users className="w-4 h-4 text-emerald-500" />
+        isLoading ? <AdminSkeleton /> : (
+          <div className="px-4 py-4 space-y-4">
+            {/* Key Metrics */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center">
+                    <Users className="w-4 h-4 text-emerald-500" />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold mb-1">{totalUsers.toLocaleString()}</div>
+                <div className="text-xs text-neutral-500 mb-2">Total Users</div>
+                <div className="flex items-center gap-1 text-xs text-emerald-500">
+                  <ArrowUpRight className="w-3 h-3" />
+                  <span>+12.5% this week</span>
                 </div>
               </div>
-              <div className="text-2xl font-bold mb-1">{totalUsers.toLocaleString()}</div>
-              <div className="text-xs text-neutral-500 mb-2">Total Users</div>
-              <div className="flex items-center gap-1 text-xs text-emerald-500">
-                <ArrowUpRight className="w-3 h-3" />
-                <span>+12.5% this week</span>
+
+              <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 text-blue-500" />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold mb-1">₹{(totalInvestments / 1000).toFixed(0)}k</div>
+                <div className="text-xs text-neutral-500 mb-2">Total Investments</div>
+                <div className="flex items-center gap-1 text-xs text-emerald-500">
+                  <ArrowUpRight className="w-3 h-3" />
+                  <span>+8.3% this week</span>
+                </div>
+              </div>
+
+              <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center">
+                    <DollarSign className="w-4 h-4 text-purple-500" />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold mb-1">₹{(totalRevenue / 1000).toFixed(1)}k</div>
+                <div className="text-xs text-neutral-500 mb-2">Platform Revenue</div>
+                <div className="flex items-center gap-1 text-xs text-emerald-500">
+                  <ArrowUpRight className="w-3 h-3" />
+                  <span>+15.2% this week</span>
+                </div>
+              </div>
+
+              <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 bg-yellow-500/10 rounded-lg flex items-center justify-center">
+                    <Activity className="w-4 h-4 text-yellow-500" />
+                  </div>
+                </div>
+                <div className="text-2xl font-bold mb-1">{activeAthletes}</div>
+                <div className="text-xs text-neutral-500 mb-2">Active Athletes</div>
+                <div className="flex items-center gap-1 text-xs text-emerald-500">
+                  <ArrowUpRight className="w-3 h-3" />
+                  <span>+3 this month</span>
+                </div>
               </div>
             </div>
 
+            {/* Weekly Performance Chart */}
             <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4 text-blue-500" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold mb-1">₹{(totalInvestments / 1000).toFixed(0)}k</div>
-              <div className="text-xs text-neutral-500 mb-2">Total Investments</div>
-              <div className="flex items-center gap-1 text-xs text-emerald-500">
-                <ArrowUpRight className="w-3 h-3" />
-                <span>+8.3% this week</span>
-              </div>
-            </div>
-
-            <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-4 h-4 text-purple-500" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold mb-1">₹{(totalRevenue / 1000).toFixed(1)}k</div>
-              <div className="text-xs text-neutral-500 mb-2">Platform Revenue</div>
-              <div className="flex items-center gap-1 text-xs text-emerald-500">
-                <ArrowUpRight className="w-3 h-3" />
-                <span>+15.2% this week</span>
-              </div>
-            </div>
-
-            <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 bg-yellow-500/10 rounded-lg flex items-center justify-center">
-                  <Activity className="w-4 h-4 text-yellow-500" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold mb-1">{activeAthletes}</div>
-              <div className="text-xs text-neutral-500 mb-2">Active Athletes</div>
-              <div className="flex items-center gap-1 text-xs text-emerald-500">
-                <ArrowUpRight className="w-3 h-3" />
-                <span>+3 this month</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Weekly Performance Chart */}
-          <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
-            <h3 className="text-sm font-semibold mb-4">Weekly Performance</h3>
-            <div className="space-y-2">
-              {weeklyStats.map((stat) => (
-                <div key={stat.day} className="flex items-center gap-3">
-                  <div className="w-10 text-xs text-neutral-500">{stat.day}</div>
-                  <div className="flex-1">
-                    <div className="h-8 bg-white/5 rounded-lg overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-emerald-500/50 to-emerald-500/20"
-                        style={{ width: `${(stat.investments / 180000) * 100}%` }}
-                      />
+              <h3 className="text-sm font-semibold mb-4">Weekly Performance</h3>
+              <div className="space-y-2">
+                {weeklyStats.map((stat) => (
+                  <div key={stat.day} className="flex items-center gap-3">
+                    <div className="w-10 text-xs text-neutral-500">{stat.day}</div>
+                    <div className="flex-1">
+                      <div className="h-8 bg-white/5 rounded-lg overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-500/50 to-emerald-500/20"
+                          style={{ width: `${(stat.investments / 180000) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="text-xs font-medium w-16 text-right">
+                      ₹{(stat.investments / 1000).toFixed(0)}k
                     </div>
                   </div>
-                  <div className="text-xs font-medium w-16 text-right">
-                    ₹{(stat.investments / 1000).toFixed(0)}k
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Recent Activity */}
-          <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold">Recent Activity</h3>
-              <button className="text-xs text-neutral-500 hover:text-white transition-colors">
-                View all
-              </button>
-            </div>
-            <div className="space-y-3">
-              {recentActivity.map((activity) => (
-                <div key={activity.id} className="flex items-start gap-3 pb-3 border-b border-white/[0.05] last:border-0 last:pb-0">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    activity.type === 'investment' ? 'bg-emerald-500/10' :
-                    activity.type === 'withdrawal' ? 'bg-yellow-500/10' :
-                    'bg-blue-500/10'
-                  }`}>
-                    {activity.type === 'investment' ? (
-                      <TrendingUp className="w-4 h-4 text-emerald-500" />
-                    ) : activity.type === 'withdrawal' ? (
-                      <DollarSign className="w-4 h-4 text-yellow-500" />
-                    ) : (
-                      <UserCheck className="w-4 h-4 text-blue-500" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm mb-1">
-                      <span className="font-medium">{activity.user}</span>{' '}
-                      <span className="text-neutral-500">{activity.action}</span>{' '}
-                      {activity.athlete && <span className="font-medium">{activity.athlete}</span>}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-neutral-500">
-                      <Clock className="w-3 h-3" />
-                      <span>{activity.timestamp}</span>
-                      {activity.status === 'completed' && (
-                        <span className="flex items-center gap-1 text-emerald-500">
-                          <CheckCircle className="w-3 h-3" />
-                          Completed
-                        </span>
+            {/* Recent Activity */}
+            <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold">Recent Activity</h3>
+                <button className="text-xs text-neutral-500 hover:text-white transition-colors">
+                  View all
+                </button>
+              </div>
+              <div className="space-y-3">
+                {recentActivity.map((activity) => (
+                  <div key={activity.id} className="flex items-start gap-3 pb-3 border-b border-white/[0.05] last:border-0 last:pb-0">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${activity.type === 'investment' ? 'bg-emerald-500/10' :
+                      activity.type === 'withdrawal' ? 'bg-yellow-500/10' :
+                        'bg-blue-500/10'
+                      }`}>
+                      {activity.type === 'investment' ? (
+                        <TrendingUp className="w-4 h-4 text-emerald-500" />
+                      ) : activity.type === 'withdrawal' ? (
+                        <DollarSign className="w-4 h-4 text-yellow-500" />
+                      ) : (
+                        <UserCheck className="w-4 h-4 text-blue-500" />
                       )}
                     </div>
-                  </div>
-                  {activity.amount && (
-                    <div className="text-sm font-semibold">
-                      ₹{activity.amount.toLocaleString()}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm mb-1">
+                        <span className="font-medium">{activity.user}</span>{' '}
+                        <span className="text-neutral-500">{activity.action}</span>{' '}
+                        {activity.athlete && <span className="font-medium">{activity.athlete}</span>}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-neutral-500">
+                        <Clock className="w-3 h-3" />
+                        <span>{activity.timestamp}</span>
+                        {activity.status === 'completed' && (
+                          <span className="flex items-center gap-1 text-emerald-500">
+                            <CheckCircle className="w-3 h-3" />
+                            Completed
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                    {activity.amount && (
+                      <div className="text-sm font-semibold">
+                        ₹{activity.amount.toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Quick Actions */}
-          <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
-            <h3 className="text-sm font-semibold mb-3">Quick Actions</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <Link to="/admin/athletes/add">
-                <button className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-sm font-medium py-3 rounded-xl transition-colors">
-                  Add Athlete
-                </button>
-              </Link>
-              <Link to="/admin/users">
-                <button className="w-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 text-sm font-medium py-3 rounded-xl transition-colors">
-                  Manage Users
-                </button>
-              </Link>
-              <Link to="/admin/transactions">
-                <button className="w-full bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 text-sm font-medium py-3 rounded-xl transition-colors">
-                  View Transactions
-                </button>
-              </Link>
-              <Link to="/admin/settings">
-                <button className="w-full bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 text-sm font-medium py-3 rounded-xl transition-colors">
-                  Platform Settings
-                </button>
-              </Link>
+            {/* Quick Actions */}
+            <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-4">
+              <h3 className="text-sm font-semibold mb-3">Quick Actions</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <Link to="/admin/athletes/add">
+                  <button className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-sm font-medium py-3 rounded-xl transition-colors">
+                    Add Athlete
+                  </button>
+                </Link>
+                <Link to="/admin/users">
+                  <button className="w-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 text-sm font-medium py-3 rounded-xl transition-colors">
+                    Manage Users
+                  </button>
+                </Link>
+                <Link to="/admin/transactions">
+                  <button className="w-full bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 text-sm font-medium py-3 rounded-xl transition-colors">
+                    View Transactions
+                  </button>
+                </Link>
+                <Link to="/admin/settings">
+                  <button className="w-full bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 text-sm font-medium py-3 rounded-xl transition-colors">
+                    Platform Settings
+                  </button>
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
+        )
       )}
 
       {/* Athletes Tab */}
@@ -301,7 +328,7 @@ export default function Admin() {
 
           {/* Athletes List */}
           <div className="space-y-2">
-            {mockAthletes.map((athlete) => (
+            {athletes.map((athlete) => (
               <div key={athlete.id} className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-4">
                 <div className="flex items-start gap-3">
                   <div className="w-12 h-12 rounded-xl overflow-hidden bg-neutral-800 flex-shrink-0">
@@ -334,16 +361,87 @@ export default function Admin() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.05]">
+                  <button
+                    onClick={() => handleSimulate(athlete.id, 'excellent')}
+                    disabled={simulating !== null}
+                    className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-medium py-2 rounded-lg transition-colors disabled:opacity-40 flex items-center justify-center gap-1"
+                  >
+                    <ArrowUpRight className="w-3 h-3" />
+                    Boost
+                  </button>
+                  <button
+                    onClick={() => handleSimulate(athlete.id, 'terrible')}
+                    disabled={simulating !== null}
+                    className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium py-2 rounded-lg transition-colors disabled:opacity-40 flex items-center justify-center gap-1"
+                  >
+                    <ArrowDownRight className="w-3 h-3" />
+                    Tank
+                  </button>
                   <button className="flex-1 bg-white/5 hover:bg-white/10 text-white text-xs font-medium py-2 rounded-lg transition-colors">
                     Edit
                   </button>
-                  <button className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-medium py-2 rounded-lg transition-colors">
-                    Suspend
-                  </button>
                 </div>
+                {simulating === athlete.id && (
+                  <div className="mt-2 flex items-center justify-center gap-2 text-xs text-neutral-400 py-2">
+                    <div className="w-4 h-4 border-2 border-neutral-600 border-t-white rounded-full animate-spin" />
+                    Simulating…
+                  </div>
+                )}
               </div>
             ))}
           </div>
+
+          {/* Simulation Result Sheet */}
+          {simResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="fixed bottom-20 left-4 right-4 z-50"
+            >
+              <div className={`rounded-2xl border p-4 backdrop-blur-md ${simResult.quality === 'excellent'
+                ? 'bg-emerald-950/90 border-emerald-500/30'
+                : 'bg-red-950/90 border-red-500/30'
+                }`}>
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="text-sm font-bold mb-0.5">
+                      {simResult.quality === 'excellent' ? '⬆ Boost' : '⬇ Tank'} — {simResult.player_name}
+                    </div>
+                    <div className="text-xs text-neutral-400">{simResult.sport}</div>
+                  </div>
+                  <button
+                    onClick={() => setSimResult(null)}
+                    className="text-neutral-500 hover:text-white p-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <div className="text-neutral-400 mb-1">Price</div>
+                    <div className="font-bold">₹{simResult.after.current_price.toFixed(2)}</div>
+                    <div className={`font-medium ${simResult.deltas.current_price >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {simResult.deltas.current_price >= 0 ? '+' : ''}{simResult.deltas.current_price.toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-neutral-400 mb-1">FV</div>
+                    <div className="font-bold">₹{simResult.after.fundamental_value.toFixed(2)}</div>
+                    <div className={`font-medium ${simResult.deltas.fundamental_value >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {simResult.deltas.fundamental_value >= 0 ? '+' : ''}{simResult.deltas.fundamental_value.toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-neutral-400 mb-1">PS</div>
+                    <div className="font-bold">{(simResult.after.performance_score * 100).toFixed(1)}</div>
+                    <div className={`font-medium ${simResult.deltas.performance_score >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {simResult.deltas.performance_score >= 0 ? '+' : ''}{(simResult.deltas.performance_score * 100).toFixed(2)}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
         </div>
       )}
 
@@ -395,11 +493,10 @@ export default function Admin() {
                       <p className="text-xs text-neutral-500">{user.email}</p>
                     </div>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded ${
-                    user.status === 'verified' 
-                      ? 'bg-emerald-500/10 text-emerald-500' 
-                      : 'bg-yellow-500/10 text-yellow-500'
-                  }`}>
+                  <span className={`text-xs px-2 py-1 rounded ${user.status === 'verified'
+                    ? 'bg-emerald-500/10 text-emerald-500'
+                    : 'bg-yellow-500/10 text-yellow-500'
+                    }`}>
                     {user.status}
                   </span>
                 </div>
@@ -444,7 +541,7 @@ export default function Admin() {
 
           {/* Transactions List */}
           <div className="space-y-2">
-            {mockOrders.map((order) => {
+            {orders.map((order) => {
               const isBuy = order.type === 'BUY';
               return (
                 <div key={order.id} className="bg-[#0a0a0a] border border-white/[0.08] rounded-xl p-4">
@@ -452,9 +549,8 @@ export default function Admin() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-semibold text-sm">{order.athleteName}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
-                        }`}>
+                        <span className={`text-xs px-2 py-0.5 rounded ${isBuy ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
+                          }`}>
                           {order.type}
                         </span>
                       </div>
@@ -466,10 +562,9 @@ export default function Admin() {
                       <div className="font-semibold text-sm mb-1">
                         ₹{order.totalAmount.toLocaleString()}
                       </div>
-                      <span className={`text-xs ${
-                        order.status === 'Completed' ? 'text-emerald-500' :
+                      <span className={`text-xs ${order.status === 'Completed' ? 'text-emerald-500' :
                         order.status === 'Pending' ? 'text-yellow-500' : 'text-red-500'
-                      }`}>
+                        }`}>
                         {order.status}
                       </span>
                     </div>

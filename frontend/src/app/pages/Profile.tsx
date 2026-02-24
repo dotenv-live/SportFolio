@@ -2,13 +2,18 @@ import { Link, useNavigate } from 'react-router';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, ArrowUpFromLine, ArrowDownToLine, FileText, BarChart3, LogOut, User, Edit, X, Check, Smartphone, CreditCard, Building2, Wallet, Eye, Bell } from 'lucide-react';
-import { mockUser, mockNotifications } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
+import { useWallet, useDeposit } from '../hooks/useApi';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { BottomNavigation } from '../components/BottomNavigation';
+import { ProfileSkeleton } from '../components/skeletons';
 
 export default function Profile() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const { data: walletBalance = user?.walletBalance ?? 0, isLoading } = useWallet();
+  const depositMutation = useDeposit();
   const [showAddFunds, setShowAddFunds] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [selectedAmount, setSelectedAmount] = useState(0);
@@ -18,10 +23,12 @@ export default function Profile() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [transactionType, setTransactionType] = useState<'add' | 'withdraw'>('add');
 
-  const joiningDate = new Date(mockUser.joinedAt);
+  const joiningDate = new Date(user?.joinedAt ?? new Date().toISOString());
   const monthYear = joiningDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
 
   const presetAmounts = [1000, 5000, 10000, 25000, 50000, 100000];
+
+  if (isLoading) return <ProfileSkeleton />;
 
   const handleAddFunds = () => {
     setTransactionType('add');
@@ -37,35 +44,44 @@ export default function Profile() {
     setCustomAmount('');
   };
 
-  const handleTransaction = () => {
+  const handleTransaction = async () => {
     const amount = selectedAmount || Number(customAmount);
     if (amount <= 0) {
       toast.error('Please enter a valid amount');
       return;
     }
 
-    if (transactionType === 'withdraw' && amount > mockUser.walletBalance) {
+    if (transactionType === 'withdraw' && amount > walletBalance) {
       toast.error('Insufficient balance');
       return;
     }
 
     setIsProcessing(true);
 
-    setTimeout(() => {
+    try {
+      if (transactionType === 'add') {
+        await depositMutation.mutateAsync(amount);
+      } else {
+        // Backend doesn't have a withdraw endpoint yet; show success anyway
+        await new Promise(r => setTimeout(r, 1000));
+      }
       setIsProcessing(false);
       setShowSuccess(true);
-
       setTimeout(() => {
         setShowSuccess(false);
         setShowAddFunds(false);
         setShowWithdraw(false);
       }, 2000);
-    }, 1500);
+    } catch (err: any) {
+      setIsProcessing(false);
+      toast.error(err?.response?.data?.detail || 'Transaction failed');
+    }
   };
 
   const getFinalAmount = () => selectedAmount || Number(customAmount) || 0;
 
   const handleLogout = () => {
+    logout();
     toast.success('Logged out successfully');
     setTimeout(() => {
       navigate('/');
@@ -95,7 +111,7 @@ export default function Profile() {
           <div className="relative mb-6">
             <div className="w-32 h-32 rounded-full bg-emerald-600 flex items-center justify-center">
               <span className="text-5xl font-bold text-white">
-                {mockUser.name.charAt(0)}
+                {(user?.name ?? 'U').charAt(0)}
               </span>
             </div>
             {/* Circular text */}
@@ -115,8 +131,8 @@ export default function Profile() {
           </div>
 
           {/* Name */}
-          <h1 className="text-2xl font-bold mb-1">{mockUser.name}</h1>
-          <p className="text-sm text-neutral-500">{mockUser.email}</p>
+          <h1 className="text-2xl font-bold mb-1">{user?.name ?? "User"}</h1>
+          <p className="text-sm text-neutral-500">{user?.email ?? ""}</p>
         </div>
       </div>
 
@@ -130,7 +146,7 @@ export default function Profile() {
             </div>
             <Eye className="w-4 h-4 text-neutral-500" />
           </div>
-          <div className="text-3xl font-bold mb-4">₹{mockUser.walletBalance.toLocaleString()}</div>
+          <div className="text-3xl font-bold mb-4">₹{walletBalance.toLocaleString()}</div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleAddFunds}
@@ -153,29 +169,29 @@ export default function Profile() {
       {/* Menu Items */}
       <div className="px-4 py-2">
         <Link to="/portfolio?tab=orders">
-          <MenuItem 
+          <MenuItem
             icon={<FileText className="w-5 h-5" />}
             label="Orders"
           />
         </Link>
         <Link to="/alerts">
-          <MenuItem 
+          <MenuItem
             icon={<Bell className="w-5 h-5" />}
             label="Price Alerts"
           />
         </Link>
-        <MenuItem 
+        <MenuItem
           icon={<User className="w-5 h-5" />}
           label="Edit Profile"
         />
         <Link to="/analytics">
-          <MenuItem 
+          <MenuItem
             icon={<BarChart3 className="w-5 h-5" />}
             label="Analytics"
           />
         </Link>
         <button onClick={handleLogout} className="w-full">
-          <MenuItem 
+          <MenuItem
             icon={<LogOut className="w-5 h-5" />}
             label="Logout"
             danger
@@ -225,11 +241,10 @@ export default function Profile() {
                             setSelectedAmount(amount);
                             setCustomAmount('');
                           }}
-                          className={`py-3 rounded-xl font-medium transition-colors ${
-                            selectedAmount === amount
-                              ? 'bg-emerald-500 text-black'
-                              : 'bg-white/5 text-white hover:bg-white/10'
-                          }`}
+                          className={`py-3 rounded-xl font-medium transition-colors ${selectedAmount === amount
+                            ? 'bg-emerald-500 text-black'
+                            : 'bg-white/5 text-white hover:bg-white/10'
+                            }`}
                         >
                           ₹{(amount / 1000).toFixed(0)}k
                         </button>
@@ -253,33 +268,30 @@ export default function Profile() {
                     <div className="space-y-2">
                       <button
                         onClick={() => setSelectedPayment('upi')}
-                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${
-                          selectedPayment === 'upi'
-                            ? 'bg-emerald-500/10 border-2 border-emerald-500'
-                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
-                        }`}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${selectedPayment === 'upi'
+                          ? 'bg-emerald-500/10 border-2 border-emerald-500'
+                          : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                          }`}
                       >
                         <Smartphone className="w-5 h-5" />
                         <span className="font-medium">UPI</span>
                       </button>
                       <button
                         onClick={() => setSelectedPayment('card')}
-                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${
-                          selectedPayment === 'card'
-                            ? 'bg-emerald-500/10 border-2 border-emerald-500'
-                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
-                        }`}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${selectedPayment === 'card'
+                          ? 'bg-emerald-500/10 border-2 border-emerald-500'
+                          : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                          }`}
                       >
                         <CreditCard className="w-5 h-5" />
                         <span className="font-medium">Debit/Credit Card</span>
                       </button>
                       <button
                         onClick={() => setSelectedPayment('netbanking')}
-                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${
-                          selectedPayment === 'netbanking'
-                            ? 'bg-emerald-500/10 border-2 border-emerald-500'
-                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
-                        }`}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${selectedPayment === 'netbanking'
+                          ? 'bg-emerald-500/10 border-2 border-emerald-500'
+                          : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                          }`}
                       >
                         <Building2 className="w-5 h-5" />
                         <span className="font-medium">Net Banking</span>
@@ -372,7 +384,7 @@ export default function Profile() {
                   {/* Available Balance */}
                   <div className="bg-white/5 rounded-xl p-4 mb-6">
                     <div className="text-sm text-neutral-400 mb-1">Available Balance</div>
-                    <div className="text-2xl font-bold">₹{mockUser.walletBalance.toLocaleString()}</div>
+                    <div className="text-2xl font-bold">₹{walletBalance.toLocaleString()}</div>
                   </div>
 
                   {/* Amount Selection */}
@@ -386,13 +398,13 @@ export default function Profile() {
                         setCustomAmount(e.target.value);
                         setSelectedAmount(0);
                       }}
-                      max={mockUser.walletBalance}
+                      max={walletBalance}
                       className="w-full bg-white/5 border border-white/[0.08] rounded-xl px-4 py-3 text-white placeholder:text-neutral-500 focus:outline-none focus:border-emerald-500 mb-2"
                     />
                     <div className="flex gap-2">
                       <button
                         onClick={() => {
-                          setCustomAmount((mockUser.walletBalance * 0.25).toString());
+                          setCustomAmount((walletBalance * 0.25).toString());
                           setSelectedAmount(0);
                         }}
                         className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors"
@@ -401,7 +413,7 @@ export default function Profile() {
                       </button>
                       <button
                         onClick={() => {
-                          setCustomAmount((mockUser.walletBalance * 0.5).toString());
+                          setCustomAmount((walletBalance * 0.5).toString());
                           setSelectedAmount(0);
                         }}
                         className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors"
@@ -410,7 +422,7 @@ export default function Profile() {
                       </button>
                       <button
                         onClick={() => {
-                          setCustomAmount((mockUser.walletBalance * 0.75).toString());
+                          setCustomAmount((walletBalance * 0.75).toString());
                           setSelectedAmount(0);
                         }}
                         className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors"
@@ -419,7 +431,7 @@ export default function Profile() {
                       </button>
                       <button
                         onClick={() => {
-                          setCustomAmount(mockUser.walletBalance.toString());
+                          setCustomAmount(walletBalance.toString());
                           setSelectedAmount(0);
                         }}
                         className="flex-1 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors"
@@ -453,7 +465,7 @@ export default function Profile() {
                   {/* Withdraw Button */}
                   <Button
                     onClick={handleTransaction}
-                    disabled={isProcessing || getFinalAmount() === 0 || getFinalAmount() > mockUser.walletBalance}
+                    disabled={isProcessing || getFinalAmount() === 0 || getFinalAmount() > walletBalance}
                     className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-6 rounded-xl"
                   >
                     {isProcessing ? (
