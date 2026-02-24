@@ -14,6 +14,20 @@ class LSTMModel:
         self.version = "mock-lstm-1"
         self._model = None  # In production: load from .pt / .h5
 
+    @staticmethod
+    def _flatten_total(d: dict) -> float:
+        """Recursively sum all numeric leaf values in a (possibly nested) dict."""
+        total = 0.0
+        for v in d.values():
+            if isinstance(v, dict):
+                total += LSTMModel._flatten_total(v)
+            else:
+                try:
+                    total += float(v)
+                except (ValueError, TypeError):
+                    pass
+        return total
+
     def predict(self, historical_stats: List[Dict[str, Any]]) -> float:
         """
         Return a normalised score in [0, 1] representing time-series trend.
@@ -25,16 +39,11 @@ class LSTMModel:
         magnitudes: List[float] = []
         for match in historical_stats:
             stats = match.get("stats", match)
-            total = 0.0
-            for v in stats.values():
-                try:
-                    total += float(v)
-                except (ValueError, TypeError):
-                    pass
-            magnitudes.append(total)
+            magnitudes.append(self._flatten_total(stats))
         if len(magnitudes) < 2:
             return 0.5
-        recent_avg = np.mean(magnitudes[-3:]) if len(magnitudes) >= 3 else magnitudes[-1]
+        # Data is sorted most-recent first → [:3] = newest matches
+        recent_avg = np.mean(magnitudes[:3]) if len(magnitudes) >= 3 else magnitudes[0]
         overall_avg = np.mean(magnitudes)
         if overall_avg == 0:
             return 0.5

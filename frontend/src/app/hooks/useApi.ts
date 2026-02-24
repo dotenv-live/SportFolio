@@ -50,10 +50,23 @@ export function usePlayer(id: string | undefined) {
         const matches = await playerMatchesApi.list(id, 0, 10);
         player.recentMatches = matches.map((m: any) => ({
           date: m.date ?? '',
-          opponent: m.stats?.opponent ?? '',
-          performance: m.stats?.performance ?? '',
+          opponent: m.stats?.opponent ?? m.stats?.competition_label ?? m.stats?.opponent_name ?? '',
+          performance: m.stats?.performance ??
+            (m.stats?.performance?.time ? `${m.stats.performance.time} - Rank ${m.stats.performance.rank}` : ''),
           runs: m.stats?.runs,
           wickets: m.stats?.wickets,
+          // Swimming-specific fields
+          event: m.stats?.event,
+          time: m.stats?.performance?.time,
+          rank: m.stats?.performance?.rank,
+          fina_points: m.stats?.performance?.fina_points,
+          // Wrestling-specific fields
+          match_type: m.stats?.match_type,
+          opponent_name: m.stats?.opponent_name,
+          result: m.stats?.performance?.result,
+          technical_points_scored: m.stats?.performance?.technical_points_scored,
+          technical_points_conceded: m.stats?.performance?.technical_points_conceded,
+          status: m.stats?.performance?.status,
         }));
       } catch {
         /* matches not critical */

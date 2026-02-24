@@ -7,12 +7,12 @@ import type { Athlete, Investment, User, Order, Notification, PriceAlert } from 
 const getBaseURL = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
   const basePath = import.meta.env.VITE_API_BASE_PATH || '/api/v1';
-  
+
   // If API URL is remote (starts with http/https), use full URL
   if (apiUrl && (apiUrl.startsWith('http://') || apiUrl.startsWith('https://'))) {
     return `${apiUrl}${basePath}`;
   }
-  
+
   // Otherwise use relative path for Vite proxy
   return basePath;
 };
@@ -78,15 +78,107 @@ export function adaptPlayer(p: any, index = 0): Athlete {
 
   // Build career stats → simplified stats object
   const career = p.career_stats ?? {};
-  const firstFormat = Object.values(career)[0] as any;
-  const batting = firstFormat?.batting ?? {};
-  const bowling = firstFormat?.bowling ?? {};
+  const sportName = (p.sport ?? 'Cricket').toLowerCase();
+
+  let role = 'Athlete';
+  let stats: Athlete['stats'] = {
+    matches: p.total_matches ?? 0,
+    strikeRate: 0,
+    average: 0,
+  };
+  let swimmingCareerStats: Record<string, any> | undefined = undefined;
+  let wrestlingCareerStats: Record<string, any> | undefined = undefined;
+
+  if (sportName === 'swimming') {
+    // Swimming-specific adaptation
+    const events = Object.values(career) as any[];
+    const totalRaces = events.reduce((sum: number, e: any) => sum + (e?.races ?? 0), 0);
+    const totalMedals = events.reduce((sum: number, e: any) => {
+      const m = e?.medals ?? {};
+      return sum + (m.gold ?? 0) + (m.silver ?? 0) + (m.bronze ?? 0);
+    }, 0);
+    const bestFina = events.reduce((best: number, e: any) => {
+      const fp = e?.personal_best?.fina_points ?? 0;
+      return Math.max(best, fp);
+    }, 0);
+
+    const firstEvent = events[0];
+    if (firstEvent?.label) {
+      const label = firstEvent.label.toLowerCase();
+      if (label.includes('freestyle')) role = 'Freestyle';
+      else if (label.includes('backstroke')) role = 'Backstroke';
+      else if (label.includes('butterfly')) role = 'Butterfly';
+      else if (label.includes('breaststroke')) role = 'Breaststroke';
+      else if (label.includes('medley')) role = 'Medley';
+      else role = 'Swimmer';
+    } else {
+      role = 'Swimmer';
+    }
+
+    stats = {
+      matches: p.total_matches ?? totalRaces,
+      strikeRate: 0,
+      average: 0,
+      totalRaces,
+      totalMedals,
+      bestFinaPoints: bestFina,
+    };
+
+    swimmingCareerStats = career;
+  } else if (sportName === 'wrestling') {
+    // Wrestling-specific adaptation
+    const weightClasses = Object.values(career) as any[];
+    const totalBouts = weightClasses.reduce((sum: number, wc: any) => sum + (wc?.matches ?? 0), 0);
+    const totalMedals = weightClasses.reduce((sum: number, wc: any) => {
+      const m = wc?.medals ?? {};
+      return sum + (m.gold ?? 0) + (m.silver ?? 0) + (m.bronze ?? 0);
+    }, 0);
+    const totalGold = weightClasses.reduce((sum: number, wc: any) => sum + (wc?.medals?.gold ?? 0), 0);
+    const winRate = totalBouts > 0 ? Math.round((totalGold / totalBouts) * 100) : 0;
+
+    // Derive role from weight-class labels
+    const firstWc = weightClasses[0];
+    if (firstWc?.label) {
+      const label = firstWc.label.toLowerCase();
+      if (label.includes('freestyle')) role = 'Freestyle';
+      else if (label.includes('greco')) role = 'Greco-Roman';
+      else role = 'Wrestler';
+    } else {
+      role = 'Wrestler';
+    }
+
+    stats = {
+      matches: p.total_matches ?? totalBouts,
+      strikeRate: 0,
+      average: 0,
+      totalBouts,
+      totalWrestlingMedals: totalMedals,
+      winRate,
+    };
+
+    wrestlingCareerStats = career;
+  } else {
+    // Cricket (default) adaptation
+    const firstFormat = Object.values(career)[0] as any;
+    const batting = firstFormat?.batting ?? {};
+    const bowling = firstFormat?.bowling ?? {};
+
+    role = batting.matches ? (bowling.wickets ? 'All-rounder' : 'Batsman') : 'Bowler';
+
+    stats = {
+      matches: p.total_matches ?? batting.matches ?? bowling.matches ?? 0,
+      runs: batting.runs ?? undefined,
+      wickets: bowling.wickets ?? undefined,
+      strikeRate: batting.strike_rate ?? bowling.strike_rate ?? 0,
+      average: batting.average ?? bowling.average ?? 0,
+    };
+  }
 
   return {
     id: p._id,
     name: p.name,
     sport: p.sport ?? 'Cricket',
-    role: batting.matches ? (bowling.wickets ? 'All-rounder' : 'Batsman') : 'Bowler',
+    role,
     age: 0, // not tracked in backend
     riskTier: getRiskTier(ps),
     unitsAvailable: Math.max(0, totalShares - circulating),
@@ -101,13 +193,10 @@ export function adaptPlayer(p: any, index = 0): Athlete {
     priceChange24h,
     imageUrl: DEFAULT_IMAGES[index % DEFAULT_IMAGES.length],
     isWatchlisted: false,
-    stats: {
-      matches: p.total_matches ?? batting.matches ?? bowling.matches ?? 0,
-      runs: batting.runs ?? undefined,
-      wickets: bowling.wickets ?? undefined,
-      strikeRate: batting.strike_rate ?? bowling.strike_rate ?? 0,
-      average: batting.average ?? bowling.average ?? 0,
-    },
+    stats,
+    careerStats: career,
+    swimmingCareerStats,
+    wrestlingCareerStats,
     recentMatches: [],   // populated lazily via player-matches
     upcomingMatches: [],  // not in backend
     priceHistory: [],     // populated lazily via price-history
@@ -117,20 +206,24 @@ export function adaptPlayer(p: any, index = 0): Athlete {
 
 /** Map backend holding doc → frontend Investment interface */
 export function adaptHolding(h: any): Investment {
-  const currentValue = h.market_value ?? (h.shares_owned ?? 0) * (h.current_price ?? 0);
-  // We don't have original invested amount from the holding alone;
-  // approximate from current_price (best effort until we track it)
-  const investedAmount = currentValue; // will be overridden if we have tx data
+  // market_value is now calculated with exit price on backend
+  const currentValue = h.market_value ?? (h.shares_owned ?? 0) * (h.exit_price ?? h.current_price ?? 0);
+  // Use invested_amount from backend (calculated from transactions)
+  const investedAmount = h.invested_amount ?? 0;
+  const roi = investedAmount > 0 ? ((currentValue - investedAmount) / investedAmount) * 100 : 0;
+
   return {
     id: h._id,
     athleteId: h.player_id,
     athleteName: h.player_name ?? '',
     units: h.shares_owned ?? 0,
     investedAmount,
-    currentValue,
-    roi: 0, // computed after we get transaction data
+    currentValue, // Valued at exit price
+    roi,
     purchaseDate: h.last_accrual_timestamp ?? new Date().toISOString(),
     revenueEarned: h.accrued_dividend ?? 0,
+    markPrice: h.current_price,
+    exitPrice: h.exit_price,
   };
 }
 

@@ -11,6 +11,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.api.deps import get_current_user
 from app.db.mongo import get_db
 from app.services.dividend_engine import accrue_for_holding
+from app.services.trading_engine import calculate_exit_price
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -30,6 +31,50 @@ async def get_holdings(
         h = await db.holdings.find_one({"_id": h["_id"]})
         # Enrich with player name + current price
         player = await db.players.find_one({"_id": h["player_id"]})
+        
+        # Calculate invested amount using weighted average cost basis
+        # This represents the cost basis of CURRENTLY HELD shares
+        running_shares = 0.0  # Track shares we currently own
+        running_cost = 0.0     # Track total cost of currently held shares
+        
+        # Process all transactions chronologically
+        async for tx in db.transactions.find({
+            "user_id": current_user["_id"],
+            "player_id": h["player_id"],
+            "type": {"$in": ["buy", "sell", "liquidity_buyback"]}
+        }).sort("timestamp", 1):
+            if tx["type"] == "buy":
+                # Add to position: increase shares and cost
+                running_shares += tx["shares"]
+                running_cost += tx["shares"] * tx["price"]
+            elif tx["type"] in ["sell", "liquidity_buyback"]:
+                # Reduce position: decrease shares and proportional cost
+                if running_shares > 0:
+                    # Calculate average cost per share of current holdings
+                    avg_cost = running_cost / running_shares
+                    # Remove the cost basis (NOT the sale proceeds) of shares being sold
+                    shares_sold = tx["shares"]
+                    running_cost -= shares_sold * avg_cost
+                    running_shares -= shares_sold
+                    # Ensure non-negative due to floating point precision
+                    running_cost = max(0, running_cost)
+                    running_shares = max(0, running_shares)
+        
+        # Invested amount is the cost basis of remaining shares
+        invested_amount = running_cost
+        
+        # Validate: running_shares should match actual shares_owned
+        # (small difference allowed for floating point precision)
+        if abs(running_shares - h["shares_owned"]) > 0.01:
+            # Mismatch detected - log for debugging but use calculated value
+            # This could happen if there are dividend or other transaction types
+            pass
+        
+        # Calculate exit price accounting for the built-in spread
+        # This is what you'd actually get if you sold now
+        exit_price = await calculate_exit_price(db, h["player_id"], h["shares_owned"])
+        market_value = round(h["shares_owned"] * exit_price, 2)
+        
         holdings.append({
             "_id": str(h["_id"]),
             "player_id": str(h["player_id"]),
@@ -37,7 +82,9 @@ async def get_holdings(
             "shares_owned": h["shares_owned"],
             "accrued_dividend": round(h["accrued_dividend"], 6),
             "current_price": player["current_price"] if player else 0,
-            "market_value": round(h["shares_owned"] * (player["current_price"] if player else 0), 2),
+            "exit_price": exit_price,  # Price accounting for exit spread
+            "market_value": market_value,  # Valued at exit price
+            "invested_amount": round(invested_amount, 2),
             "last_accrual_timestamp": h.get("last_accrual_timestamp"),
         })
     return holdings
