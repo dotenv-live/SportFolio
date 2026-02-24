@@ -31,16 +31,69 @@ from app.services.dividend_engine import accrue_for_holding
 from app.core.ws_manager import ws_manager
 
 
+def _calculate_price_impact(
+    beta: float,
+    shares: float,
+    total_shares: float,
+    current_price: float,
+    fundamental_value: float,
+    direction: int,
+) -> float:
+    """Calculate what the price would be after a trade (without executing).
+
+    Applies the change in DI as an incremental delta on top of the current
+    price so that buys always push the price UP and sells always push DOWN,
+    regardless of where current_price sits relative to FV × DI.
+
+        delta = direction × FV × β × (shares / total_shares)
+        new_price = current_price + delta
+
+    The delta magnitude is derived from the FV × DI formula used by the
+    cron price engine, keeping trade-time and cron-time consistent.
+
+    direction: +1 for buy, -1 for sell.
+    """
+    delta = direction * fundamental_value * beta * (shares / max(total_shares, 1.0))
+    new_price = max(0.01, current_price + delta)
+    return round(new_price, 2)
+
+
+async def calculate_exit_price(
+    db: AsyncIOMotorDatabase,
+    player_id: ObjectId,
+    shares: float,
+) -> float:
+    """Calculate the effective price if selling the given number of shares.
+
+    This accounts for the negative price impact (exit spread).
+    Returns the price the market would move to after the sell.
+    """
+    doc = await db.players.find_one({"_id": player_id})
+    beta = doc.get("beta", 0.05)
+    total_shares = doc.get("total_shares", 1.0)
+    current_price = doc.get("current_price", 1.0)
+    fv = doc.get("fundamental_value", current_price)
+
+    exit_price = _calculate_price_impact(
+        beta, shares, total_shares, current_price, fv, direction=-1,
+    )
+    return exit_price
+
+
 async def _apply_price_delta(
     db: AsyncIOMotorDatabase,
     player_id: ObjectId,
     shares: float,
     direction: int,  # +1 for buy, -1 for sell
 ) -> dict:
-    """Apply a simple delta to the current price.
+    """Apply an incremental price delta based on the FV × DI formula.
 
-    delta = direction * beta * (shares / total_shares) * current_price
-    new_price = max(0.01, current_price + delta)
+    delta = direction × FV × β × (shares / total_shares)
+    new_price = current_price + delta
+
+    Buys always push the price UP; sells always push it DOWN.
+    The cron's recalculate_player_price anchors the price to FV × DI
+    over time via smoothing.
 
     Returns {"current_price": new, "fundamental_value": fv}.
     """
@@ -50,8 +103,9 @@ async def _apply_price_delta(
     current_price = doc.get("current_price", 1.0)
     fv = doc.get("fundamental_value", current_price)
 
-    delta = direction * beta * (shares / max(total_shares, 1.0)) * current_price
-    new_price = round(max(0.01, current_price + delta), 2)
+    new_price = _calculate_price_impact(
+        beta, shares, total_shares, current_price, fv, direction,
+    )
 
     await db.players.update_one(
         {"_id": player_id},
@@ -229,6 +283,7 @@ async def sell_shares(
     # In production: scan pending buy orders for the same player.
     # For now, fall straight through to AMM buyback.
     internal_matched = 0.0  # shares matched internally
+    shares_to_sell = shares  # Always sell the full amount requested
     remaining = shares - internal_matched
 
     # ---------- AMM buyback for remaining ----------
@@ -236,28 +291,29 @@ async def sell_shares(
     buyback_cost = buyback_price * remaining
 
     liq_pool = player.get("liquidity_pool_balance", 0.0)
+    
+    # Calculate actual proceeds
     if buyback_cost > liq_pool:
-        # Partial fill up to what pool can cover
-        if liq_pool > 0:
-            remaining = liq_pool / buyback_price
-            buyback_cost = liq_pool
-        else:
-            # Pool empty – fall back to paying from circulating-share value
-            # (platform absorbs the cost to avoid blocking sells entirely)
-            buyback_cost = 0.0
-            # remaining stays as-is; user still gets proceeds at buyback_price
+        # Platform absorbs the cost to avoid blocking sells
+        # Pay user for all shares at buyback price, even if pool is insufficient
+        buyback_cost_from_pool = liq_pool  # Use whatever is in the pool
+        proceeds_from_buyback = remaining * buyback_price  # Still pay full amount
+    else:
+        buyback_cost_from_pool = buyback_cost
+        proceeds_from_buyback = remaining * buyback_price
 
-    total_proceeds = (internal_matched * price) + (remaining * buyback_price) + total_dividend
+    total_proceeds = (internal_matched * price) + proceeds_from_buyback + total_dividend
 
     # ---------- update liquidity pool ----------
     await db.players.update_one(
         {"_id": player_id},
-        {"$inc": {"liquidity_pool_balance": -buyback_cost}},
+        {"$inc": {"liquidity_pool_balance": -buyback_cost_from_pool}},
     )
 
     # ---------- update holding ----------
-    new_shares = holding["shares_owned"] - (internal_matched + remaining)
-    if new_shares <= 0:
+    # ALWAYS remove the full amount the user wanted to sell
+    new_shares = holding["shares_owned"] - shares_to_sell
+    if new_shares <= 0.01:  # Account for floating point precision
         await db.holdings.delete_one({"_id": holding["_id"]})
     else:
         await db.holdings.update_one(
@@ -272,7 +328,8 @@ async def sell_shares(
     )
 
     # ---------- increment sell volume & decrease circulating ----------
-    sold_total = internal_matched + remaining
+    # Use the full amount the user sold, not just what was matched
+    sold_total = shares_to_sell
     await db.players.update_one(
         {"_id": player_id},
         {"$inc": {"sell_volume": sold_total, "circulating_shares": -sold_total}},
@@ -287,7 +344,7 @@ async def sell_shares(
         "type": txn_type,
         "user_id": user_id,
         "player_id": player_id,
-        "shares": sold_total,
+        "shares": sold_total,  # Record the full amount sold
         "price": buyback_price if remaining > 0 else price,
         "timestamp": now,
     }
@@ -321,7 +378,7 @@ async def sell_shares(
         "transaction_id": str(result.inserted_id),
         "shares_sold": sold_total,
         "internal_matched": internal_matched,
-        "buyback_shares": remaining,
+        "buyback_shares": shares_to_sell - internal_matched,  # Shares bought back by AMM
         "buyback_price": buyback_price,
         "dividend_paid": total_dividend,
         "total_proceeds": total_proceeds,

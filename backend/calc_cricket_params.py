@@ -367,7 +367,7 @@ async def run(player_id: str | None = None):
     client = AsyncIOMotorClient(settings.mongo_uri, tlsCAFile=certifi.where())
     db = client[settings.mongo_db]
 
-    query: dict = {}
+    query: dict = {"sport": {"$regex": "^cricket$", "$options": "i"}}
     if player_id:
         query["_id"] = ObjectId(player_id)
 

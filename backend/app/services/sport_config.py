@@ -161,4 +161,32 @@ _DEFAULT_SPORTS: List[Dict[str, Any]] = [
         "phi": 0.3,
         "ai_weights": {"xgb": 0.6, "lstm": 0.4},
     },
+    {
+        "name": "Swimming",
+        "metrics": [
+            # Primary performance metrics
+            {"key": "performance.fina_points", "weight": 0.35, "normalization": "minmax"},
+            {"key": "performance.time_ms", "weight": 0.25, "normalization": "minmax"},
+            {"key": "performance.rank", "weight": 0.20, "normalization": "minmax"},
+            {"key": "performance.reaction_time", "weight": 0.10, "normalization": "minmax"},
+            # Match context
+            {"key": "match_type", "weight": 0.10, "normalization": "minmax"},
+        ],
+        "phi": 0.25,
+        "ai_weights": {"xgb": 0.55, "lstm": 0.45},
+    },
+    {
+        "name": "Wrestling",
+        "metrics": [
+            # Bout performance metrics
+            {"key": "performance.result", "weight": 0.30, "normalization": "minmax"},
+            {"key": "performance.technical_points_scored", "weight": 0.25, "normalization": "minmax"},
+            {"key": "performance.technical_points_conceded", "weight": 0.20, "normalization": "minmax"},
+            # Match context
+            {"key": "match_type", "weight": 0.15, "normalization": "minmax"},
+            {"key": "performance.status", "weight": 0.10, "normalization": "minmax"},
+        ],
+        "phi": 0.35,
+        "ai_weights": {"xgb": 0.65, "lstm": 0.35},
+    },
 ]

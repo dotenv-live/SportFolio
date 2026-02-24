@@ -13,8 +13,9 @@ Formulas:
     Demand Impact (used by cron recalculation only):
         DI = 1 + beta * (circulating_shares / total_shares)
 
-    Trade-time pricing uses a simple delta model instead
-    (see trading_engine._apply_price_delta).
+    Trade-time pricing applies incremental deltas derived from the DI
+    formula (delta = direction × FV × β × shares/total) on top of the
+    current price (see trading_engine._apply_price_delta).
 
     Raw Price:
         P = FV * DI
