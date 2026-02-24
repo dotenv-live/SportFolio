@@ -74,9 +74,8 @@ async def backfill() -> None:
         base_value = player.get("base_value", 50.0)
         alpha = player.get("alpha", 0.8)
         beta = player.get("beta", 0.05)
-        buy_vol = player.get("buy_volume", 0.0)
-        sell_vol = player.get("sell_volume", 0.0)
         float_shares = player.get("circulating_shares", player.get("total_shares", 1.0))
+        total_shares = player.get("total_shares", 1.0)
         is_injured = player.get("is_injured", False)
 
         # ── Gather all matches, oldest-first ─────────────────────────
@@ -113,7 +112,7 @@ async def backfill() -> None:
 
             # ── Derive price ─────────────────────────────────────────
             fv = compute_fundamental_value(base_value, alpha, ps)
-            di = compute_demand_impact(beta, buy_vol, sell_vol, float_shares)
+            di = compute_demand_impact(beta, float_shares, total_shares)
             p_raw = compute_raw_price(fv, di)
             p_final = smooth_price(p_raw, prev_price)
             prev_price = p_final

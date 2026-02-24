@@ -7,11 +7,12 @@ import { useWallet, useDeposit } from '../hooks/useApi';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { BottomNavigation } from '../components/BottomNavigation';
+import { ProfileSkeleton } from '../components/skeletons';
 
 export default function Profile() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { data: walletBalance = user?.walletBalance ?? 0 } = useWallet();
+  const { data: walletBalance = user?.walletBalance ?? 0, isLoading } = useWallet();
   const depositMutation = useDeposit();
   const [showAddFunds, setShowAddFunds] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
@@ -26,6 +27,8 @@ export default function Profile() {
   const monthYear = joiningDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
 
   const presetAmounts = [1000, 5000, 10000, 25000, 50000, 100000];
+
+  if (isLoading) return <ProfileSkeleton />;
 
   const handleAddFunds = () => {
     setTransactionType('add');
@@ -166,29 +169,29 @@ export default function Profile() {
       {/* Menu Items */}
       <div className="px-4 py-2">
         <Link to="/portfolio?tab=orders">
-          <MenuItem 
+          <MenuItem
             icon={<FileText className="w-5 h-5" />}
             label="Orders"
           />
         </Link>
         <Link to="/alerts">
-          <MenuItem 
+          <MenuItem
             icon={<Bell className="w-5 h-5" />}
             label="Price Alerts"
           />
         </Link>
-        <MenuItem 
+        <MenuItem
           icon={<User className="w-5 h-5" />}
           label="Edit Profile"
         />
         <Link to="/analytics">
-          <MenuItem 
+          <MenuItem
             icon={<BarChart3 className="w-5 h-5" />}
             label="Analytics"
           />
         </Link>
         <button onClick={handleLogout} className="w-full">
-          <MenuItem 
+          <MenuItem
             icon={<LogOut className="w-5 h-5" />}
             label="Logout"
             danger
@@ -238,11 +241,10 @@ export default function Profile() {
                             setSelectedAmount(amount);
                             setCustomAmount('');
                           }}
-                          className={`py-3 rounded-xl font-medium transition-colors ${
-                            selectedAmount === amount
-                              ? 'bg-emerald-500 text-black'
-                              : 'bg-white/5 text-white hover:bg-white/10'
-                          }`}
+                          className={`py-3 rounded-xl font-medium transition-colors ${selectedAmount === amount
+                            ? 'bg-emerald-500 text-black'
+                            : 'bg-white/5 text-white hover:bg-white/10'
+                            }`}
                         >
                           ₹{(amount / 1000).toFixed(0)}k
                         </button>
@@ -266,33 +268,30 @@ export default function Profile() {
                     <div className="space-y-2">
                       <button
                         onClick={() => setSelectedPayment('upi')}
-                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${
-                          selectedPayment === 'upi'
-                            ? 'bg-emerald-500/10 border-2 border-emerald-500'
-                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
-                        }`}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${selectedPayment === 'upi'
+                          ? 'bg-emerald-500/10 border-2 border-emerald-500'
+                          : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                          }`}
                       >
                         <Smartphone className="w-5 h-5" />
                         <span className="font-medium">UPI</span>
                       </button>
                       <button
                         onClick={() => setSelectedPayment('card')}
-                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${
-                          selectedPayment === 'card'
-                            ? 'bg-emerald-500/10 border-2 border-emerald-500'
-                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
-                        }`}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${selectedPayment === 'card'
+                          ? 'bg-emerald-500/10 border-2 border-emerald-500'
+                          : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                          }`}
                       >
                         <CreditCard className="w-5 h-5" />
                         <span className="font-medium">Debit/Credit Card</span>
                       </button>
                       <button
                         onClick={() => setSelectedPayment('netbanking')}
-                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${
-                          selectedPayment === 'netbanking'
-                            ? 'bg-emerald-500/10 border-2 border-emerald-500'
-                            : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
-                        }`}
+                        className={`w-full flex items-center gap-3 p-4 rounded-xl transition-colors ${selectedPayment === 'netbanking'
+                          ? 'bg-emerald-500/10 border-2 border-emerald-500'
+                          : 'bg-white/5 border-2 border-transparent hover:bg-white/10'
+                          }`}
                       >
                         <Building2 className="w-5 h-5" />
                         <span className="font-medium">Net Banking</span>
