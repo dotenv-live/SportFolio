@@ -269,3 +269,58 @@ export function AnalyticsSkeleton() {
     </div>
   );
 }
+
+// ─── Profile ─────────────────────────────────────────────────────────
+
+export function ProfileSkeleton() {
+  return (
+    <div className="min-h-screen bg-black text-white pb-24 animate-in fade-in duration-300">
+      {/* Header */}
+      <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-sm border-b border-white/[0.08] px-4 py-3">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-5 w-16 bg-white/[0.06]" />
+          <Skeleton className="w-8 h-8 rounded-lg bg-white/[0.06]" />
+        </div>
+      </div>
+
+      {/* Profile Avatar + Name */}
+      <div className="px-4 py-8 border-b border-white/[0.08]">
+        <div className="flex flex-col items-center">
+          <Skeleton className="w-32 h-32 rounded-full bg-white/[0.06] mb-6" />
+          <Skeleton className="h-7 w-40 bg-white/[0.06] mb-2" />
+          <Skeleton className="h-4 w-48 bg-white/[0.06]" />
+        </div>
+      </div>
+
+      {/* Wallet Balance Card */}
+      <div className="px-4 py-4 border-b border-white/[0.08]">
+        <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Skeleton className="w-5 h-5 rounded bg-emerald-500/20" />
+              <Skeleton className="h-3 w-24 bg-white/[0.06]" />
+            </div>
+            <Skeleton className="w-4 h-4 rounded bg-white/[0.06]" />
+          </div>
+          <Skeleton className="h-9 w-36 bg-white/[0.06] mb-4" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="flex-1 h-10 rounded-xl bg-emerald-500/20" />
+            <Skeleton className="flex-1 h-10 rounded-xl bg-white/[0.06]" />
+          </div>
+        </div>
+      </div>
+
+      {/* Menu Items */}
+      <div className="px-4 py-2">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex items-center gap-4 py-4 border-b border-white/[0.05]">
+            <Skeleton className="w-5 h-5 rounded bg-white/[0.06]" />
+            <Skeleton className="h-4 flex-1 bg-white/[0.06]" style={{ maxWidth: `${100 + i * 15}px` }} />
+            <Skeleton className="w-4 h-4 rounded bg-white/[0.06]" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+

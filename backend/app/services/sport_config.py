@@ -41,7 +41,7 @@ class SportConfigService:
         by_name: Dict[str, dict] = {}
         by_id: Dict[str, dict] = {}
         async for doc in db.sports.find():
-            by_name[doc["name"]] = doc
+            by_name[doc["name"].lower()] = doc
             by_id[str(doc["_id"])] = doc
         self._cache_by_name = by_name
         self._cache_by_id = by_id
@@ -51,10 +51,10 @@ class SportConfigService:
     # Read operations
     # ------------------------------------------------------------------
     async def get_by_name(self, db: AsyncIOMotorDatabase, sport_name: str) -> Optional[dict]:
-        """Return sport config dict by sport name (cached)."""
+        """Return sport config dict by sport name (cached, case-insensitive)."""
         if not self._is_cache_valid():
             await self._refresh_cache(db)
-        return self._cache_by_name.get(sport_name)
+        return self._cache_by_name.get(sport_name.lower())
 
     async def get_by_id(self, db: AsyncIOMotorDatabase, sport_id: str | ObjectId) -> Optional[dict]:
         """Return sport config dict by document _id (cached)."""

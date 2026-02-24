@@ -192,7 +192,11 @@ async def main():
     db = client[settings.mongo_db]
 
     # ── Pick a Cricket player ─────────────────────────────────────
-    player = await db.players.find_one({"sport": {"$regex": "^cricket$", "$options": "i"}})
+    player = await db.players.find(
+    {"sport": {"$regex": "^cricket$", "$options": "i"}}
+    ).skip(1).limit(1).to_list(length=1)
+
+    player = player[0] if player else None
     if not player:
         print("No cricket player found – run the seed first.")
         return
